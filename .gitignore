@@ -1,0 +1,56 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.pyc
+*.pyo
+*.so
+.Python
+build/
+dist/
+*.egg
+
+# Virtual environments
+.env
+.env.local
+.env copy
+*.env
+.venv
+venv/
+env/
+ENV/
+
+# Data outputs
+/data/embeddings/
+/data/study_materials/
+/data/logs/
+/data/test_profiles/
+/data/profiles/
+
+# Credentials and secrets
+configs/credentials.json
+client_secret_*.json
+token.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logs
+*.log
+logs/
+
+# Jupyter
+.ipynb_checkpoints

@@ -1,0 +1,87 @@
+[
+  {
+    "text": "Stay hungry, stay foolish.",
+    "persona": "Steve Jobs",
+    "tags": [
+      "focus",
+      "innovation"
+    ],
+    "source_url": "https://www.youtube.com/watch?v=UF8uR6Z6KLc",
+    "retrieved_at": "2025-11-03T12:39:42.275595",
+    "context": "Stanford commencement address, 2005"
+  },
+  {
+    "text": "Everything negative \u2013 pressure, challenges \u2013 is an opportunity to rise.",
+    "persona": "Kobe Bryant",
+    "tags": [
+      "perseverance",
+      "grit"
+    ],
+    "source_url": "https://www.youtube.com/watch?v=5W-O2w-o9jo",
+    "retrieved_at": "2025-11-03T12:39:42.275863"
+  },
+  {
+    "text": "You must do the things you think you cannot do.",
+    "persona": "Eleanor Roosevelt",
+    "tags": [
+      "courage",
+      "self-belief"
+    ],
+    "source_url": "https://www.goodreads.com/quotes/58693",
+    "retrieved_at": "2025-11-03T12:39:42.275867"
+  },
+  {
+    "text": "Fear is the disease. Hustle is the antidote.",
+    "persona": "Travis Kalanick",
+    "tags": [
+      "drive",
+      "entrepreneurship"
+    ],
+    "source_url": "https://www.inc.com/magazine/201211/eric-markowitz/travis-kalanick-uber.html",
+    "retrieved_at": "2025-11-03T12:39:42.275870"
+  },
+  {
+    "text": "If I have seen further it is by standing on the shoulders of Giants.",
+    "persona": "Isaac Newton",
+    "tags": [
+      "learning",
+      "perseverance"
+    ],
+    "retrieved_at": "2025-11-04T17:04:32.878016"
+  },
+  {
+    "text": "I am among those who think that science has great beauty.",
+    "persona": "Marie Curie",
+    "tags": [
+      "learning"
+    ],
+    "retrieved_at": "2025-11-04T17:04:40.838391"
+  },
+  {
+    "text": "The first principle is that you must not fool yourself \u2013 and you are the easiest person to fool.",
+    "persona": "Richard Feynman",
+    "tags": [
+      "self-belief",
+      "learning"
+    ],
+    "retrieved_at": "2025-11-04T17:04:48.435685"
+  },
+  {
+    "text": "Somewhere, something incredible is waiting to be known.",
+    "persona": "Carl Sagan",
+    "tags": [
+      "learning",
+      "self-belief"
+    ],
+    "retrieved_at": "2025-11-04T17:04:59.650576"
+  },
+  {
+    "text": "An expert is a person who has made all the mistakes that can be made in a very narrow field.",
+    "persona": "Niels Bohr",
+    "tags": [
+      "learning",
+      "perseverance"
+    ],
+    "retrieved_at": "2025-11-04T17:07:02.723640"
+  }
+]
