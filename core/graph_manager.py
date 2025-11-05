@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from agents import MotivatorAgent, SchedulerAgent, TutorAgent
+if TYPE_CHECKING:
+    from agents import MotivatorAgent, SchedulerAgent, TutorAgent
 
 
 @dataclass

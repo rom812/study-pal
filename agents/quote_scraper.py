@@ -65,7 +65,7 @@ class WebSearchQuoteScraper:
         """
         system_prompt = (
             "You are a quote researcher. Your task is to provide accurate, "
-            "well-known inspirational quotes from famous figures. "
+            "well-known inspirational quotes from famous figures (without changing them). "
             "Return ONLY valid JSON in the exact format specified, with no additional text."
         )
 
