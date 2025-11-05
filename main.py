@@ -7,6 +7,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from agents import MotivatorAgent, OpenAIMotivationModel, QuoteStore, SchedulerAgent, TutorAgent
+from agents.tutor_chatbot import ChatInterface, TutorChatbot
 from core.graph_manager import GraphManager
 from core.mcp_connectors import CalendarConnector
 from core.rag_pipeline import RAGPipeline
@@ -134,17 +135,46 @@ def demo_full_system():
     print(result)
 
 
+def start_chatbot():
+    """Start the interactive chatbot."""
+    print("🚀 Starting Study Pal Chatbot...")
+    print("   Initializing RAG pipeline and AI tutor...\n")
+
+    # Initialize RAG pipeline and tutor agent
+    rag_pipeline = RAGPipeline()
+    tutor_agent = TutorAgent(rag_pipeline=rag_pipeline)
+
+    # Create chatbot
+    chatbot = TutorChatbot(tutor_agent=tutor_agent)
+
+    # Start chat interface
+    chat_interface = ChatInterface(chatbot=chatbot)
+    chat_interface.run()
+
+
 if __name__ == "__main__":
     import sys
 
     # Check command line arguments
-    if len(sys.argv) > 1 and sys.argv[1] == "--tutor-demo":
-        demo_tutor_agent()
-    elif len(sys.argv) > 1 and sys.argv[1] == "--full":
-        demo_full_system()
+    if len(sys.argv) > 1:
+        command = sys.argv[1]
+
+        if command == "--chat":
+            start_chatbot()
+        elif command == "--tutor-demo":
+            demo_tutor_agent()
+        elif command == "--full":
+            demo_full_system()
+        else:
+            print(f"❌ Unknown command: {command}")
+            print("\n📖 Study Pal - Available commands:")
+            print("   python main.py --chat         # Start interactive chatbot")
+            print("   python main.py --tutor-demo   # Demo TutorAgent with RAG")
+            print("   python main.py --full         # Demo full system with all agents")
     else:
-        print("\n📖 Study Pal - Available demos:")
+        print("\n📖 Study Pal - Available commands:")
+        print("   python main.py --chat         # Start interactive chatbot")
         print("   python main.py --tutor-demo   # Demo TutorAgent with RAG")
         print("   python main.py --full         # Demo full system with all agents")
-        print("\nDefaulting to TutorAgent demo...\n")
-        demo_tutor_agent()
+        print("\nDefaulting to chatbot...\n")
+        start_chatbot()
