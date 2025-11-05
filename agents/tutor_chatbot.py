@@ -6,8 +6,11 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from langchain.memory import ConversationBufferWindowMemory
+from langchain_community.chat_message_histories import ChatMessageHistory
+from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_openai import ChatOpenAI
 
 from agents.tutor_agent import TutorAgent
@@ -38,10 +41,10 @@ class TutorChatbot:
     tutor_agent: TutorAgent
     model_name: str = "gpt-4"
     temperature: float = 0.7
-    memory_k: int = 10  # Number of exchanges to remember
+    memory_k: int = 20  # Number of messages to remember (10 exchanges)
 
     # These will be initialized in __post_init__
-    memory: ConversationBufferWindowMemory = field(init=False)
+    memory: ChatMessageHistory = field(init=False)
     llm: ChatOpenAI = field(init=False)
 
     def __post_init__(self) -> None:
@@ -57,15 +60,11 @@ class TutorChatbot:
             openai_api_key=api_key,
         )
 
-        # Initialize LangChain memory (sliding window)
-        self.memory = ConversationBufferWindowMemory(
-            k=self.memory_k,
-            return_messages=True,
-            memory_key="history",
-        )
+        # Initialize LangChain memory
+        self.memory = ChatMessageHistory()
 
         print(f"[chatbot] Initialized with model: {self.model_name}")
-        print(f"[chatbot] Memory: last {self.memory_k} exchanges")
+        print(f"[chatbot] Memory: last {self.memory_k // 2} exchanges")
 
     def chat(self, user_message: str, k: int = 3) -> str:
         """
@@ -84,15 +83,15 @@ class TutorChatbot:
         # Build system prompt with context
         system_prompt = self._build_system_prompt(context_chunks)
 
-        # Get chat history from memory
-        chat_history = self.memory.load_memory_variables({})
-
         # Build messages for LLM
         messages = [SystemMessage(content=system_prompt)]
 
-        # Add chat history if available
-        if chat_history and "history" in chat_history:
-            messages.extend(chat_history["history"])
+        # Add chat history (keep only last N messages for sliding window)
+        history_messages = self.memory.messages
+        if len(history_messages) > self.memory_k:
+            history_messages = history_messages[-self.memory_k :]
+
+        messages.extend(history_messages)
 
         # Add current user message
         messages.append(HumanMessage(content=user_message))
@@ -102,17 +101,17 @@ class TutorChatbot:
             response = self.llm.invoke(messages)
             assistant_message = response.content
 
-            # Save interaction to memory (LangChain handles this automatically)
-            self.memory.save_context(
-                {"input": user_message}, {"output": assistant_message}
-            )
+            # Save interaction to memory
+            self.memory.add_user_message(user_message)
+            self.memory.add_ai_message(assistant_message)
 
             return assistant_message
 
         except Exception as e:
             error_msg = f"Sorry, I encountered an error: {str(e)}"
             # Still save error to memory to maintain conversation flow
-            self.memory.save_context({"input": user_message}, {"output": error_msg})
+            self.memory.add_user_message(user_message)
+            self.memory.add_ai_message(error_msg)
             return error_msg
 
     def ingest_material(self, path: Path) -> str:
@@ -151,10 +150,10 @@ class TutorChatbot:
 
     def get_conversation_summary(self) -> str:
         """Get summary of current conversation."""
-        chat_history = self.memory.load_memory_variables({})
-        if chat_history and "history" in chat_history:
-            num_messages = len(chat_history["history"])
-            return f"Conversation: {num_messages} messages in memory window"
+        num_messages = len(self.memory.messages)
+        if num_messages > 0:
+            num_exchanges = num_messages // 2
+            return f"Conversation: {num_messages} messages ({num_exchanges} exchanges)"
         return "Conversation: No messages yet"
 
     def _build_system_prompt(self, context_chunks: list[str]) -> str:
