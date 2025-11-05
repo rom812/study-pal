@@ -44,6 +44,31 @@ class UserProfile(BaseModel):
         if len(self.progress_log) > 50:
             self.progress_log[:] = self.progress_log[-50:]
 
+    def get_personas(self) -> list[str]:
+        """
+        Get all personas associated with this user.
+
+        Returns:
+            List of persona names, starting with primary_persona followed by preferred_personas.
+            Returns at least one persona (primary_persona or "default").
+        """
+        personas = []
+
+        # Add primary persona first
+        if self.primary_persona:
+            personas.append(self.primary_persona)
+
+        # Add preferred personas (avoid duplicates)
+        for persona in self.preferred_personas:
+            if persona not in personas:
+                personas.append(persona)
+
+        # Fallback to default if empty
+        if not personas:
+            personas.append("default")
+
+        return personas
+
 
 class UserProfileStore:
     """Simple JSON backed persistence keyed by user id."""

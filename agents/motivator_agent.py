@@ -183,6 +183,61 @@ class MotivatorAgent:
 
         return message
 
+    def craft_messages_from_user_personas(
+        self,
+        user_id: str,
+        scraper: WebSearchQuoteScraper | None = None,
+        personalizer: PersonalizedQuoteGenerator | None = None,
+        save_to_store: bool = True,
+    ) -> list[MotivationMessage]:
+        """
+        Generate motivational messages from all personas in the user's profile.
+
+        This method automatically retrieves all personas (primary + preferred) from the
+        user's profile and creates a personalized message for each one by scraping
+        quotes from the web.
+
+        Args:
+            user_id: The user to create messages for
+            scraper: Optional quote scraper (creates default if None)
+            personalizer: Optional personalizer (creates default if None)
+            save_to_store: If True, saves the scraped quotes to the quote store
+
+        Returns:
+            List of MotivationMessage objects, one for each persona
+        """
+        # Load user profile
+        profile = self._load_profile(user_id) if self.profile_store else None
+
+        if not profile:
+            raise ValueError(f"No profile found for user_id: {user_id}")
+
+        # Get all personas from user profile
+        personas = profile.get_personas()
+
+        if not personas:
+            raise ValueError(f"No personas found in profile for user_id: {user_id}")
+
+        print(f"[motivator] Generating messages for {len(personas)} personas: {', '.join(personas)}")
+
+        # Generate message for each persona
+        messages = []
+        for persona in personas:
+            try:
+                message = self.craft_message_from_web(
+                    user_id=user_id,
+                    persona=persona,
+                    scraper=scraper,
+                    personalizer=personalizer,
+                    save_to_store=save_to_store,
+                )
+                messages.append(message)
+            except Exception as e:
+                print(f"[motivator] Warning: Failed to generate message for {persona}: {e}")
+                continue
+
+        return messages
+
     # ------------------------------------------------------------------
     # Message generation helpers
     # ------------------------------------------------------------------

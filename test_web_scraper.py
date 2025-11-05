@@ -22,12 +22,12 @@ def setup_user_profile() -> tuple[UserProfileStore, str]:
     user_id = "test_user_web"
     profile = UserProfile(
         user_id=user_id,
-        name="Alex",
-        primary_persona="Isaac Newton",
-        study_topics=["Physics", "Calculus", "Scientific Method"],
-        current_focus="understanding calculus fundamentals",
-        traits=["procrastination", "doubt", "perfectionism"],
-        goals=["Master calculus", "Build confidence in problem-solving", "Overcome perfectionism"],
+        name="Rom",
+        primary_persona="David goggins",
+        study_topics=["Job interviews", "Leetcode", "Personal project"],
+        current_focus="scoring a role in hi-tech",
+        traits=["procrastination", "doubt", "think little of myslf"],
+        goals=["finding a job"],
     )
 
     profile_store.save(profile)
