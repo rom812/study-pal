@@ -167,24 +167,39 @@ class TutorChatbot:
             System prompt string
         """
         base_prompt = (
-            "You are a helpful AI tutor assistant. Your role is to help students "
-            "understand study materials by answering their questions clearly and accurately.\n\n"
-            "Guidelines:\n"
-            "- Use the provided context from study materials when available\n"
-            "- If context is relevant, base your answer on it\n"
-            "- If context is not sufficient, acknowledge this and provide general guidance\n"
+            "You are a strict AI tutor assistant. Your role is to help students "
+            "understand ONLY their study materials.\n\n"
+            "CRITICAL RULES - YOU MUST FOLLOW THESE:\n"
+            "1. ONLY answer questions based on the provided context from study materials\n"
+            "2. If the context does NOT contain information to answer the question, you MUST say:\n"
+            "   'I cannot answer this question based on your study materials. Please ask about topics covered in your uploaded PDFs.'\n"
+            "3. NEVER use your general knowledge or make up information\n"
+            "4. NEVER hallucinate or invent facts not in the context\n"
+            "5. If you're unsure, say you don't have enough information in the materials\n\n"
+            "Guidelines when context IS available:\n"
+            "- Base your answer STRICTLY on the provided context\n"
+            "- Quote relevant parts from the context when possible\n"
             "- Be encouraging and supportive\n"
             "- Break down complex topics into understandable parts\n"
-            "- Ask clarifying questions if needed\n"
         )
 
         if context_chunks:
             context_text = "\n\n".join(
                 f"[Context {i+1}]:\n{chunk}" for i, chunk in enumerate(context_chunks)
             )
-            return f"{base_prompt}\n\nRELEVANT CONTEXT FROM STUDY MATERIALS:\n{context_text}"
+            return (
+                f"{base_prompt}\n\n"
+                f"RELEVANT CONTEXT FROM STUDY MATERIALS:\n{context_text}\n\n"
+                f"Remember: Answer ONLY based on the above context. If the answer is not in the context, "
+                f"clearly state that the information is not available in the study materials."
+            )
         else:
-            return f"{base_prompt}\n\nNote: No relevant context found in study materials for this question."
+            return (
+                f"{base_prompt}\n\n"
+                f"⚠️ NO CONTEXT AVAILABLE\n"
+                f"No relevant information was found in the study materials.\n"
+                f"You MUST tell the user that you cannot answer this question based on their uploaded materials."
+            )
 
 
 @dataclass
