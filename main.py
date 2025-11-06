@@ -7,7 +7,9 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from agents import MotivatorAgent, OpenAIMotivationModel, QuoteStore, SchedulerAgent, TutorAgent
+from agents.onboarding import create_onboarding_agent
 from agents.tutor_chatbot import ChatInterface, TutorChatbot
+from agents.user_profile import UserProfileStore
 from core.graph_manager import GraphManager
 from core.mcp_connectors import CalendarConnector
 from core.rag_pipeline import RAGPipeline
@@ -135,8 +137,67 @@ def demo_full_system():
     print(result)
 
 
-def start_chatbot():
+def run_onboarding(user_id: str = "default_user"):
+    """Run the onboarding flow for a new user."""
+    print(f"\n🎯 Starting onboarding for user: {user_id}")
+
+    # Check if profile already exists
+    profile_store = UserProfileStore(Path("data/profiles"))
+    try:
+        existing_profile = profile_store.load(user_id)
+        print(f"\n⚠️  Profile already exists for '{user_id}'")
+        print(f"   Name: {existing_profile.name}")
+        print(f"   Persona: {existing_profile.primary_persona}")
+
+        overwrite = input("\nDo you want to create a new profile? This will overwrite the existing one. (yes/no): ").strip().lower()
+        if overwrite not in ["yes", "y"]:
+            print("Onboarding cancelled.\n")
+            return
+    except FileNotFoundError:
+        pass  # No existing profile, proceed with onboarding
+
+    # Create and run onboarding agent
+    onboarding_agent = create_onboarding_agent()
+    try:
+        profile = onboarding_agent.run_onboarding(user_id)
+        print(f"✅ Profile saved to: data/profiles/{user_id}.json\n")
+        return profile
+    except KeyboardInterrupt:
+        print("\n\n👋 Onboarding interrupted. You can try again anytime.\n")
+        return None
+
+
+def check_and_load_profile(user_id: str = "default_user") -> bool:
+    """
+    Check if a user profile exists and load it.
+
+    Args:
+        user_id: User identifier
+
+    Returns:
+        True if profile exists, False otherwise
+    """
+    profile_store = UserProfileStore(Path("data/profiles"))
+    try:
+        profile = profile_store.load(user_id)
+        print(f"✅ Loaded profile for {profile.name}")
+        print(f"   Motivational guide: {profile.primary_persona}")
+        if profile.current_focus:
+            print(f"   Current focus: {profile.current_focus}")
+        return True
+    except FileNotFoundError:
+        return False
+
+
+def start_chatbot(user_id: str = "default_user"):
     """Start the interactive chatbot."""
+    # Check for user profile
+    if not check_and_load_profile(user_id):
+        print(f"\n⚠️  No profile found for user '{user_id}'")
+        print("Let's create one first!\n")
+        run_onboarding(user_id)
+        print()
+
     print("🚀 Starting Study Pal Chatbot...")
     print("   Initializing RAG pipeline and AI tutor...\n")
 
@@ -155,12 +216,19 @@ def start_chatbot():
 if __name__ == "__main__":
     import sys
 
+    # Get user_id if provided
+    user_id = "default_user"
+    if len(sys.argv) > 2:
+        user_id = sys.argv[2]
+
     # Check command line arguments
     if len(sys.argv) > 1:
         command = sys.argv[1]
 
-        if command == "--chat":
-            start_chatbot()
+        if command == "--onboard":
+            run_onboarding(user_id)
+        elif command == "--chat":
+            start_chatbot(user_id)
         elif command == "--tutor-demo":
             demo_tutor_agent()
         elif command == "--full":
@@ -168,13 +236,17 @@ if __name__ == "__main__":
         else:
             print(f"❌ Unknown command: {command}")
             print("\n📖 Study Pal - Available commands:")
-            print("   python main.py --chat         # Start interactive chatbot")
-            print("   python main.py --tutor-demo   # Demo TutorAgent with RAG")
-            print("   python main.py --full         # Demo full system with all agents")
+            print("   python main.py --onboard [user_id]   # Create/update user profile")
+            print("   python main.py --chat [user_id]      # Start interactive chatbot")
+            print("   python main.py --tutor-demo          # Demo TutorAgent with RAG")
+            print("   python main.py --full                # Demo full system with all agents")
+            print("\n   [user_id] is optional and defaults to 'default_user'")
     else:
         print("\n📖 Study Pal - Available commands:")
-        print("   python main.py --chat         # Start interactive chatbot")
-        print("   python main.py --tutor-demo   # Demo TutorAgent with RAG")
-        print("   python main.py --full         # Demo full system with all agents")
+        print("   python main.py --onboard [user_id]   # Create/update user profile")
+        print("   python main.py --chat [user_id]      # Start interactive chatbot")
+        print("   python main.py --tutor-demo          # Demo TutorAgent with RAG")
+        print("   python main.py --full                # Demo full system with all agents")
+        print("\n   [user_id] is optional and defaults to 'default_user'")
         print("\nDefaulting to chatbot...\n")
-        start_chatbot()
+        start_chatbot(user_id)
