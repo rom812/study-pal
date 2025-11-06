@@ -14,6 +14,7 @@ from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_openai import ChatOpenAI
 
 from agents.tutor_agent import TutorAgent
+from core.weakness_analyzer import SessionRecommendations, WeaknessAnalyzer
 
 
 @dataclass
@@ -155,6 +156,19 @@ class TutorChatbot:
             num_exchanges = num_messages // 2
             return f"Conversation: {num_messages} messages ({num_exchanges} exchanges)"
         return "Conversation: No messages yet"
+
+    def analyze_session(self, session_topic: str | None = None) -> SessionRecommendations:
+        """
+        Analyze the current tutoring session to identify weak points and generate recommendations.
+
+        Args:
+            session_topic: Optional topic that was studied during the session
+
+        Returns:
+            SessionRecommendations with weak points and study suggestions
+        """
+        analyzer = WeaknessAnalyzer(min_frequency=2, min_confusion_signals=1)
+        return analyzer.analyze_conversation(self.memory.messages, session_topic=session_topic)
 
     def _build_system_prompt(self, context_chunks: list[str]) -> str:
         """
@@ -301,6 +315,9 @@ class ChatInterface:
         elif cmd == "/status":
             self._print_status()
 
+        elif cmd == "/finish":
+            self._handle_finish_session()
+
         else:
             print(f"❌ Unknown command: {cmd}")
             print("💡 Type /help for available commands")
@@ -328,6 +345,7 @@ class ChatInterface:
         print("  /ingest <path>        - Load a PDF file into knowledge base")
         print("  /count                - Show number of chunks in knowledge base")
         print("  /status               - Show system status")
+        print("  /finish               - Analyze session and get recommendations")
         print("  /clear                - Clear conversation history")
         print("  /clear-materials      - Clear all study materials")
         print("  /quit or /exit        - Exit the chatbot")
@@ -340,3 +358,82 @@ class ChatInterface:
         print(f"  Temperature: {self.chatbot.temperature}")
         print(f"  Knowledge base: {self.chatbot.get_materials_count()} chunks")
         print(f"  {self.chatbot.get_conversation_summary()}")
+
+    def _handle_finish_session(self) -> None:
+        """Analyze the session and display recommendations."""
+        num_messages = len(self.chatbot.memory.messages)
+
+        if num_messages < 2:
+            print("\n⚠️  Not enough conversation to analyze.")
+            print("   Have at least one exchange before finishing the session.")
+            return
+
+        print("\n🔍 Analyzing your study session...")
+
+        # Ask for optional session topic
+        session_topic = input("What topic did you study? (optional, press Enter to skip): ").strip()
+        if not session_topic:
+            session_topic = None
+
+        # Analyze the session
+        recommendations = self.chatbot.analyze_session(session_topic=session_topic)
+
+        # Display results
+        self._display_session_analysis(recommendations)
+
+    def _display_session_analysis(self, recommendations: SessionRecommendations) -> None:
+        """Display session analysis results in a user-friendly format."""
+        print("\n" + "=" * 70)
+        print("📊 Session Analysis Report")
+        print("=" * 70)
+
+        # Session summary
+        print(f"\n📝 {recommendations.session_summary}")
+
+        # Weak points
+        if recommendations.weak_points:
+            print(f"\n🎯 Areas for Improvement ({len(recommendations.weak_points)} identified):")
+            print("-" * 70)
+
+            for idx, wp in enumerate(recommendations.weak_points, 1):
+                # Difficulty indicator
+                if wp.difficulty_level == "severe":
+                    icon = "🔴"
+                elif wp.difficulty_level == "moderate":
+                    icon = "🟡"
+                else:
+                    icon = "🟢"
+
+                print(f"\n{idx}. {icon} {wp.topic.upper()} - {wp.difficulty_level.capitalize()} difficulty")
+                print(f"   Frequency: {wp.frequency} mentions")
+                if wp.confusion_indicators > 0:
+                    print(f"   Confusion signals detected: {wp.confusion_indicators}")
+
+                # Show evidence
+                if wp.evidence:
+                    print(f"   Example: \"{wp.evidence[0][:80]}...\"" if len(wp.evidence[0]) > 80 else f"   Example: \"{wp.evidence[0]}\"")
+
+        else:
+            print("\n✅ Great session! No significant difficulties detected.")
+
+        # Priority topics
+        if recommendations.priority_topics:
+            print(f"\n🎯 Priority Topics for Next Session:")
+            for idx, topic in enumerate(recommendations.priority_topics[:3], 1):
+                print(f"   {idx}. {topic}")
+
+        # Suggested focus time
+        if recommendations.suggested_focus_time:
+            print(f"\n⏱️  Suggested Study Time:")
+            for topic, minutes in list(recommendations.suggested_focus_time.items())[:3]:
+                print(f"   • {topic}: {minutes} minutes")
+
+        # Study tips
+        if recommendations.study_approach_tips:
+            print(f"\n💡 Study Recommendations:")
+            for idx, tip in enumerate(recommendations.study_approach_tips, 1):
+                print(f"   {idx}. {tip}")
+
+        print("\n" + "=" * 70)
+        print("Keep up the great work! 🚀")
+        print("=" * 70 + "\n")
