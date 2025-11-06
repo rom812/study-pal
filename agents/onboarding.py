@@ -72,7 +72,7 @@ class OnboardingAgent:
         try:
             # Collect profile information
             name = self._collect_name()
-            primary_persona = self._select_persona()
+            primary_persona, selected_personas = self._select_persona()
             academic_field = self._collect_academic_field()
             study_topics = self._collect_study_topics()
             goals = self._collect_goals()
@@ -83,7 +83,7 @@ class OnboardingAgent:
                 user_id=user_id,
                 name=name,
                 primary_persona=primary_persona,
-                preferred_personas=[primary_persona],
+                preferred_personas=selected_personas,
                 academic_field=academic_field,
                 study_topics=study_topics,
                 goals=goals,
@@ -99,7 +99,11 @@ class OnboardingAgent:
             print("Profile Created Successfully!")
             print("=" * 70)
             print(f"\nWelcome, {name}! Your profile has been saved.")
-            print(f"Your motivational guide: {primary_persona}")
+            if len(selected_personas) > 1:
+                print(f"Your motivational guides: {', '.join(selected_personas)}")
+                print(f"Primary guide: {primary_persona}")
+            else:
+                print(f"Your motivational guide: {primary_persona}")
             print(f"Focus area: {profile.current_focus or 'Not set'}")
             print("\nYou're all set to start your learning journey!\n")
 
@@ -117,17 +121,18 @@ class OnboardingAgent:
                 return name
             print("Please enter your name.")
 
-    def _select_persona(self) -> str:
+    def _select_persona(self) -> tuple[str, list[str]]:
         """
-        Display available personas and let user choose one.
+        Display available personas and let user choose or create their own.
+        Supports multiple personas separated by commas.
 
         Returns:
-            Selected persona name
+            Tuple of (primary_persona, list of all selected personas)
         """
         print("\n" + "-" * 70)
-        print("Choose Your Motivational Guide")
+        print("Choose Your Motivational Guide(s)")
         print("-" * 70)
-        print("\nWho inspires you? Pick a persona for personalized motivation:\n")
+        print("\nWho inspires you? Pick persona(s) for personalized motivation:\n")
 
         # Display personas with numbers
         personas_list = list(self.PERSONAS.items())
@@ -135,19 +140,95 @@ class OnboardingAgent:
             print(f"{idx:2}. {persona}")
             print(f"    {description}\n")
 
+        print(f"{len(personas_list) + 1:2}. Create my own custom persona(s)\n")
+
         # Get selection
         while True:
+            print("You can:")
+            print("  - Select one or more numbers separated by commas (e.g., 1,5,8)")
+            print(f"  - Choose option {len(personas_list) + 1} to create your own persona(s)")
+            choice = input(f"\nYour choice: ").strip()
+
+            if not choice:
+                print("Please make a selection.\n")
+                continue
+
+            # Check if user wants to create custom persona(s)
+            if choice == str(len(personas_list) + 1):
+                return self._create_custom_personas()
+
+            # Try to parse as numbers (for predefined personas)
             try:
-                choice = input(f"Select a number (1-{len(personas_list)}): ").strip()
-                idx = int(choice) - 1
-                if 0 <= idx < len(personas_list):
-                    selected_persona = personas_list[idx][0]
-                    print(f"\nGreat choice! {selected_persona} will be your guide.\n")
-                    return selected_persona
+                indices = [int(x.strip()) - 1 for x in choice.split(",")]
+                selected_personas = []
+
+                for idx in indices:
+                    if 0 <= idx < len(personas_list):
+                        selected_personas.append(personas_list[idx][0])
+                    else:
+                        print(f"Invalid number: {idx + 1}. Please use numbers between 1 and {len(personas_list)}.\n")
+                        break
                 else:
-                    print(f"Please enter a number between 1 and {len(personas_list)}.")
+                    # All indices were valid
+                    if selected_personas:
+                        primary = selected_personas[0]
+                        print(f"\nGreat choice! Your guide(s): {', '.join(selected_personas)}")
+                        print(f"Primary persona: {primary}\n")
+                        return primary, selected_personas
+                    else:
+                        print("No valid personas selected.\n")
             except ValueError:
-                print("Please enter a valid number.")
+                print("Invalid input. Please enter numbers separated by commas or select the custom option.\n")
+
+    def _create_custom_personas(self) -> tuple[str, list[str]]:
+        """
+        Allow user to create their own custom persona(s).
+
+        Returns:
+            Tuple of (primary_persona, list of all custom personas)
+        """
+        print("\n" + "-" * 70)
+        print("Create Custom Persona(s)")
+        print("-" * 70)
+        print("\nDefine your own motivational guide(s)!")
+        print("You can enter:")
+        print("  - A single persona (e.g., 'Marcus Aurelius')")
+        print("  - Multiple personas separated by commas (e.g., 'Marcus Aurelius, Bruce Lee, Maya Angelou')")
+        print("  - Any person, character, or archetype that inspires you\n")
+
+        while True:
+            custom_input = input("Enter your persona(s): ").strip()
+
+            if not custom_input:
+                print("Please enter at least one persona name.\n")
+                continue
+
+            # Parse comma-separated personas
+            personas = [p.strip() for p in custom_input.split(",") if p.strip()]
+
+            if not personas:
+                print("Please enter at least one valid persona name.\n")
+                continue
+
+            # Remove duplicates while preserving order
+            seen = set()
+            unique_personas = []
+            for persona in personas:
+                if persona.lower() not in seen:
+                    seen.add(persona.lower())
+                    unique_personas.append(persona)
+
+            primary = unique_personas[0]
+
+            print(f"\nCustom persona(s) created: {', '.join(unique_personas)}")
+            print(f"Primary persona: {primary}\n")
+
+            # Confirm with user
+            confirm = input("Is this correct? (yes/no): ").strip().lower()
+            if confirm in ['yes', 'y']:
+                return primary, unique_personas
+            else:
+                print("\nLet's try again.\n")
 
     def _collect_academic_field(self) -> Optional[str]:
         """
