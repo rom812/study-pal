@@ -5,6 +5,7 @@ from .motivator_agent import MotivatorAgent, OpenAIMotivationModel
 from .tutor_agent import TutorAgent
 from .quote_store import Quote, QuoteStore
 from .user_profile import UserProfile, UserProfileStore, UserProgressEvent
+from .weakness_detector_agent import WeaknessDetectorAgent
 
 try:
     from .quote_scraper import WebSearchQuoteScraper, PersonalizedQuoteGenerator
@@ -23,6 +24,7 @@ __all__ = [
     "UserProfileStore",
     "UserProgressEvent",
     "TutorAgent",
+    "WeaknessDetectorAgent",
 ]
 
 if _quote_scraper_available:
