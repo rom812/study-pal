@@ -254,6 +254,13 @@ class WeaknessAnalyzer:
         """Build WeakPoint objects from analysis results."""
         weak_points_dict: dict[str, WeakPoint] = {}
 
+        # Build exclusion set: words that are confusion indicators, not topics
+        exclusion_words = set()
+        for keyword in self.CONFUSION_KEYWORDS:
+            exclusion_words.update(keyword.lower().split())
+        for phrase in self.SIMPLIFICATION_REQUESTS:
+            exclusion_words.update(phrase.lower().split())
+
         # Process confusion signals
         for msg_idx, signals in confusion_signals.items():
             if msg_idx < len(messages):
@@ -261,12 +268,18 @@ class WeaknessAnalyzer:
                 text = msg.content
 
                 # Extract likely topic from the confused message
-                words = re.findall(r'\b[a-z]{4,}\b', text.lower())
+                words = re.findall(r'\b[a-z]{3,}\b', text.lower())
                 if words:
-                    # Use most common words as topic identifier
-                    topic_candidates = [w for w in words if len(w) > 4]
+                    # Filter out confusion signal words and find meaningful topic
+                    topic_candidates = [
+                        w for w in words
+                        if len(w) >= 3 and w not in exclusion_words
+                    ]
+
                     if topic_candidates:
-                        topic = topic_candidates[0]  # Simplified: use first meaningful word
+                        # Use the most frequently mentioned word as the topic
+                        # (more likely to be the actual subject than a random word)
+                        topic = max(topic_candidates, key=lambda w: topic_mentions.get(w, 0))
 
                         if topic not in weak_points_dict:
                             weak_points_dict[topic] = WeakPoint(
