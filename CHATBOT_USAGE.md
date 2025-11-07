@@ -48,6 +48,8 @@ Ask questions about your materials:
 | `/ingest <path>` | Load a PDF file into knowledge base |
 | `/count` | Show number of chunks in knowledge base |
 | `/status` | Show system status (model, memory, materials) |
+| `/finish` | Analyze your study session and identify weak points |
+| `/schedule` | Create tomorrow's study schedule based on session analysis |
 | `/clear` | Clear conversation history |
 | `/clear-materials` | Clear all study materials |
 | `/quit` or `/exit` | Exit the chatbot |

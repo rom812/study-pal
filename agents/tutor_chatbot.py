@@ -168,7 +168,12 @@ class TutorChatbot:
         Returns:
             SessionRecommendations with weak points and study suggestions
         """
-        analyzer = WeaknessAnalyzer(min_frequency=2, min_confusion_signals=1)
+        analyzer = WeaknessAnalyzer(
+            min_frequency=2,
+            min_confusion_signals=1,
+            use_llm=True,  # Enable hybrid LLM + rule-based detection
+            llm_model="gpt-4o-mini"
+        )
         recommendations = analyzer.analyze_conversation(self.memory.messages, session_topic=session_topic)
 
         # Save recommendations for scheduler integration

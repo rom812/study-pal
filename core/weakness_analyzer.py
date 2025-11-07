@@ -113,22 +113,37 @@ class WeaknessAnalyzer:
         "step by step",
     ]
 
-    def __init__(self, min_frequency: int = 2, min_confusion_signals: int = 1):
+    def __init__(
+        self,
+        min_frequency: int = 2,
+        min_confusion_signals: int = 1,
+        use_llm: bool = True,
+        llm_model: str = "gpt-4o-mini",
+    ):
         """
         Initialize the weakness analyzer.
 
         Args:
             min_frequency: Minimum times a topic must appear to be considered a weak point
             min_confusion_signals: Minimum confusion indicators to flag as weak point
+            use_llm: Whether to use LLM for deep analysis (default: True)
+            llm_model: LLM model to use for analysis (default: gpt-4o-mini)
         """
         self.min_frequency = min_frequency
         self.min_confusion_signals = min_confusion_signals
+        self.use_llm = use_llm
+        self.llm_model = llm_model
+        self._llm_detector = None
 
     def analyze_conversation(
         self, messages: list[BaseMessage], session_topic: str | None = None
     ) -> SessionRecommendations:
         """
         Analyze a conversation to identify weak points and generate recommendations.
+
+        Uses hybrid approach:
+        1. Rule-based filter to detect confusion signals (fast)
+        2. LLM analysis for deep understanding (accurate) - if enabled
 
         Args:
             messages: List of conversation messages (HumanMessage and AIMessage)
@@ -137,15 +152,21 @@ class WeaknessAnalyzer:
         Returns:
             SessionRecommendations with identified weak points and suggestions
         """
-        # Extract topics and detect struggles
-        topic_mentions = self._extract_topics(messages)
+        # Stage 1: Rule-based detection (fast filter)
         confusion_signals = self._detect_confusion_signals(messages)
-        repeated_topics = self._find_repeated_topics(messages)
+        has_confusion = len(confusion_signals) > 0
 
-        # Build weak points
-        weak_points = self._build_weak_points(
-            topic_mentions, confusion_signals, repeated_topics, messages
-        )
+        # Stage 2: LLM analysis if enabled and there are confusion signals
+        if self.use_llm and has_confusion:
+            try:
+                weak_points = self._analyze_with_llm(messages, session_topic)
+            except Exception as e:
+                print(f"[weakness_analyzer] LLM analysis failed: {e}")
+                print("[weakness_analyzer] Falling back to rule-based analysis")
+                weak_points = self._analyze_with_rules(messages)
+        else:
+            # No confusion detected or LLM disabled - use rule-based
+            weak_points = self._analyze_with_rules(messages)
 
         # Sort by severity
         weak_points.sort(
@@ -170,6 +191,64 @@ class WeaknessAnalyzer:
             study_approach_tips=study_tips,
             session_summary=summary,
         )
+
+    def _analyze_with_llm(
+        self, messages: list[BaseMessage], session_topic: str | None = None
+    ) -> list[WeakPoint]:
+        """
+        Analyze conversation using LLM for deep, context-aware weakness detection.
+
+        Args:
+            messages: List of conversation messages
+            session_topic: Optional session topic
+
+        Returns:
+            List of WeakPoint objects identified by LLM
+        """
+        # Lazy initialization of LLM detector
+        if self._llm_detector is None:
+            from core.llm_weakness_detector import LLMWeaknessDetector
+
+            self._llm_detector = LLMWeaknessDetector(model=self.llm_model)
+
+        # Call LLM detector
+        result = self._llm_detector.analyze_conversation(messages, session_topic)
+
+        # Convert LLM JSON output to WeakPoint objects
+        weak_points = []
+        for wp_data in result.get("weak_points", []):
+            weak_point = WeakPoint(
+                topic=wp_data.get("topic", "unknown"),
+                difficulty_level=wp_data.get("difficulty_level", "mild"),
+                evidence=wp_data.get("evidence", []),
+                frequency=1,  # LLM doesn't track exact frequency
+                confusion_indicators=len(wp_data.get("evidence", [])),
+            )
+            weak_points.append(weak_point)
+
+        return weak_points
+
+    def _analyze_with_rules(self, messages: list[BaseMessage]) -> list[WeakPoint]:
+        """
+        Analyze conversation using rule-based approach (fallback method).
+
+        Args:
+            messages: List of conversation messages
+
+        Returns:
+            List of WeakPoint objects identified by rules
+        """
+        # Extract topics and patterns
+        topic_mentions = self._extract_topics(messages)
+        confusion_signals = self._detect_confusion_signals(messages)
+        repeated_topics = self._find_repeated_topics(messages)
+
+        # Build weak points from detected patterns
+        weak_points = self._build_weak_points(
+            topic_mentions, confusion_signals, repeated_topics, messages
+        )
+
+        return weak_points
 
     def _extract_topics(self, messages: list[BaseMessage]) -> Counter:
         """
