@@ -6,7 +6,10 @@ import json
 import os
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
+
+if TYPE_CHECKING:
+    from core.weakness_analyzer import SessionRecommendations
 
 try:  # pragma: no cover - import guard for environments without OpenAI installed
     from openai import OpenAI
@@ -36,16 +39,41 @@ class SchedulerAgent:
 
     _last_schedule: dict | None = field(default=None, init=False, repr=False)
 
-    def generate_schedule(self, context: dict) -> dict:
-        """Create a schedule from conversational context."""
+    def generate_schedule(
+        self,
+        context: dict,
+        recommendations: SessionRecommendations | None = None,
+    ) -> dict:
+        """
+        Create a schedule from conversational context, optionally prioritizing weak points.
+
+        Args:
+            context: Dictionary containing user_input with availability and subjects
+            recommendations: Optional SessionRecommendations from tutor analysis to prioritize weak topics
+
+        Returns:
+            Schedule dictionary with preferences and sessions
+        """
         user_input = context.get("user_input") or context.get("preferences_text")
         if not user_input:
             raise ValueError("Context must include 'user_input' describing availability and subjects.")
 
         llm = self._ensure_llm()
         preferences = self._collect_preferences(user_input, llm)
+
+        # If we have recommendations, adjust the subject prioritization
+        if recommendations and recommendations.weak_points:
+            preferences = self._prioritize_weak_topics(preferences, recommendations)
+
         sessions = self._build_pomodoro_plan(preferences)
-        schedule = {"preferences": preferences, "sessions": sessions}
+
+        # Add metadata about weak points if available
+        schedule = {
+            "preferences": preferences,
+            "sessions": sessions,
+            "based_on_weak_points": recommendations is not None and len(recommendations.weak_points) > 0,
+        }
+
         self._last_schedule = schedule
         return schedule
 
@@ -180,6 +208,70 @@ class SchedulerAgent:
             raise ValueError("No Pomodoro blocks fit within the provided availability window.")
 
         return sessions
+
+    def _prioritize_weak_topics(
+        self,
+        preferences: dict,
+        recommendations: SessionRecommendations,
+    ) -> dict:
+        """
+        Adjust subject prioritization based on weak points from tutoring session.
+
+        Args:
+            preferences: Original preferences from user input
+            recommendations: SessionRecommendations with weak_points
+
+        Returns:
+            Modified preferences with prioritized subjects
+        """
+        original_subjects = preferences.get("subjects", [])
+        weak_topics = [wp.topic for wp in recommendations.weak_points]
+
+        # Build prioritized subject list
+        prioritized_subjects = []
+
+        # 1. Add severe difficulty topics first
+        severe_topics = [
+            wp.topic
+            for wp in recommendations.weak_points
+            if wp.difficulty_level == "severe"
+        ]
+        for topic in severe_topics:
+            if topic not in prioritized_subjects:
+                prioritized_subjects.append(topic)
+
+        # 2. Add moderate difficulty topics
+        moderate_topics = [
+            wp.topic
+            for wp in recommendations.weak_points
+            if wp.difficulty_level == "moderate"
+        ]
+        for topic in moderate_topics:
+            if topic not in prioritized_subjects:
+                prioritized_subjects.append(topic)
+
+        # 3. Add mild difficulty topics
+        mild_topics = [
+            wp.topic
+            for wp in recommendations.weak_points
+            if wp.difficulty_level == "mild"
+        ]
+        for topic in mild_topics:
+            if topic not in prioritized_subjects:
+                prioritized_subjects.append(topic)
+
+        # 4. Add remaining subjects from user input
+        for subject in original_subjects:
+            if subject not in prioritized_subjects:
+                prioritized_subjects.append(subject)
+
+        # Update preferences
+        preferences["subjects"] = prioritized_subjects if prioritized_subjects else original_subjects
+        preferences["weak_points_prioritized"] = True
+        preferences["severe_topics"] = severe_topics
+        preferences["moderate_topics"] = moderate_topics
+
+        return preferences
 
     def _parse_clock(self, value: str) -> datetime:
         try:
