@@ -1,8 +1,8 @@
-"""Test hybrid weakness detection with the 'rom' conversation example."""
+"""Test LLM-based weakness detection with the 'rom' conversation example."""
 
 from langchain_core.messages import AIMessage, HumanMessage
 
-from core.weakness_analyzer import WeaknessAnalyzer
+from agents.weakness_detector_agent import WeaknessDetectorAgent
 
 
 def test_rom_conversation():
@@ -19,7 +19,7 @@ def test_rom_conversation():
     ]
 
     print("=" * 70)
-    print("Testing Hybrid Weakness Detection")
+    print("Testing LLM-Based Weakness Detection Agent")
     print("=" * 70)
     print("\nConversation:")
     for msg in messages:
@@ -27,63 +27,36 @@ def test_rom_conversation():
         print(f"{role}: {msg.content}")
 
     print("\n" + "-" * 70)
-    print("Analysis with LLM enabled (hybrid approach):")
+    print("Analysis with WeaknessDetectorAgent:")
     print("-" * 70)
 
-    # Test with LLM enabled (hybrid)
-    analyzer_llm = WeaknessAnalyzer(
-        min_frequency=2,
-        min_confusion_signals=1,
-        use_llm=True,
-        llm_model="gpt-4o-mini"
-    )
+    # Test with the agent
+    detector = WeaknessDetectorAgent(model="gpt-4o-mini")
 
     try:
-        recommendations_llm = analyzer_llm.analyze_conversation(
+        result = detector.analyze_conversation(
             messages,
             session_topic="Computer Memory Concepts"
         )
 
-        print("\n✅ LLM Analysis Results:")
-        print(f"Weak points identified: {len(recommendations_llm.weak_points)}")
-        for wp in recommendations_llm.weak_points:
-            print(f"\n  Topic: {wp.topic}")
-            print(f"  Difficulty: {wp.difficulty_level}")
-            print(f"  Evidence: {wp.evidence[:1]}")  # Show first evidence
-            print(f"  Confusion indicators: {wp.confusion_indicators}")
+        weak_points = result.get("weak_points", [])
+        session_summary = result.get("session_summary", "No summary")
 
-        print(f"\n  Session Summary: {recommendations_llm.session_summary}")
-        print(f"\n  Priority topics: {recommendations_llm.priority_topics}")
+        print("\n✅ LLM Analysis Results:")
+        print(f"Weak points identified: {len(weak_points)}")
+
+        for idx, wp in enumerate(weak_points, 1):
+            print(f"\n  {idx}. Topic: {wp.get('topic')}")
+            print(f"     Difficulty: {wp.get('difficulty_level')}")
+            print(f"     Evidence: {wp.get('evidence', [])[:1]}")  # Show first evidence
+            print(f"     Reasoning: {wp.get('reasoning', 'N/A')}")
+
+        print(f"\n  Session Summary: {session_summary}")
 
     except Exception as e:
         print(f"❌ LLM Analysis failed: {e}")
-
-    print("\n" + "-" * 70)
-    print("Analysis with LLM disabled (rule-based only):")
-    print("-" * 70)
-
-    # Test with LLM disabled (rule-based fallback)
-    analyzer_rules = WeaknessAnalyzer(
-        min_frequency=2,
-        min_confusion_signals=1,
-        use_llm=False
-    )
-
-    recommendations_rules = analyzer_rules.analyze_conversation(
-        messages,
-        session_topic="Computer Memory Concepts"
-    )
-
-    print("\n✅ Rule-based Analysis Results:")
-    print(f"Weak points identified: {len(recommendations_rules.weak_points)}")
-    for wp in recommendations_rules.weak_points:
-        print(f"\n  Topic: {wp.topic}")
-        print(f"  Difficulty: {wp.difficulty_level}")
-        print(f"  Evidence: {wp.evidence[:1]}")
-        print(f"  Confusion indicators: {wp.confusion_indicators}")
-
-    print(f"\n  Session Summary: {recommendations_rules.session_summary}")
-    print(f"\n  Priority topics: {recommendations_rules.priority_topics}")
+        import traceback
+        traceback.print_exc()
 
     print("\n" + "=" * 70)
     print("Test complete!")

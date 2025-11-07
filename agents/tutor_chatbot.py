@@ -14,7 +14,8 @@ from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_openai import ChatOpenAI
 
 from agents.tutor_agent import TutorAgent
-from core.weakness_analyzer import SessionRecommendations, WeaknessAnalyzer
+from agents.weakness_detector_agent import WeaknessDetectorAgent
+from core.weakness_analyzer import SessionRecommendations, WeakPoint
 
 
 @dataclass
@@ -168,13 +169,40 @@ class TutorChatbot:
         Returns:
             SessionRecommendations with weak points and study suggestions
         """
-        analyzer = WeaknessAnalyzer(
-            min_frequency=2,
-            min_confusion_signals=1,
-            use_llm=True,  # Enable hybrid LLM + rule-based detection
-            llm_model="gpt-4o-mini"
+        # Use the weakness detector agent for LLM-based analysis
+        detector = WeaknessDetectorAgent(model="gpt-4o-mini")
+        result = detector.analyze_conversation(self.memory.messages, session_topic=session_topic)
+
+        # Convert LLM result to WeakPoint objects
+        weak_points = []
+        for wp_data in result.get("weak_points", []):
+            weak_point = WeakPoint(
+                topic=wp_data.get("topic", "unknown"),
+                difficulty_level=wp_data.get("difficulty_level", "mild"),
+                evidence=wp_data.get("evidence", []),
+                frequency=1,
+                confusion_indicators=len(wp_data.get("evidence", [])),
+            )
+            weak_points.append(weak_point)
+
+        # Build recommendations from weak points
+        from core.weakness_analyzer import WeaknessAnalyzer
+
+        analyzer = WeaknessAnalyzer()
+
+        # Generate recommendations using the analyzer's helper methods
+        priority_topics = [wp.topic for wp in weak_points[:5]]
+        suggested_focus_time = analyzer._calculate_focus_time(weak_points)
+        study_tips = analyzer._generate_study_tips(weak_points)
+        summary = result.get("session_summary", "Session analyzed")
+
+        recommendations = SessionRecommendations(
+            weak_points=weak_points,
+            priority_topics=priority_topics,
+            suggested_focus_time=suggested_focus_time,
+            study_approach_tips=study_tips,
+            session_summary=summary,
         )
-        recommendations = analyzer.analyze_conversation(self.memory.messages, session_topic=session_topic)
 
         # Save recommendations for scheduler integration
         self.last_recommendations = recommendations

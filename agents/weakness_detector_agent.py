@@ -1,4 +1,4 @@
-"""LLM-based weakness detection for nuanced analysis of student struggles."""
+"""Weakness detector agent for analyzing student struggles in conversations."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ except ImportError:
     OpenAI = None
 
 
-class LLMWeaknessDetector:
+class WeaknessDetectorAgent:
     """
     Uses LLM to analyze conversation and identify topics where student struggles.
 
@@ -227,17 +227,17 @@ Analysis:
 Now analyze the conversation and respond with JSON only."""
 
 
-def create_llm_weakness_detector(
+def create_weakness_detector_agent(
     model: str = "gpt-4o-mini", temperature: float = 0.1
-) -> LLMWeaknessDetector:
+) -> WeaknessDetectorAgent:
     """
-    Factory function to create an LLM weakness detector.
+    Factory function to create a weakness detector agent.
 
     Args:
         model: OpenAI model to use
         temperature: Temperature for LLM (low = more consistent)
 
     Returns:
-        Configured LLMWeaknessDetector instance
+        Configured WeaknessDetectorAgent instance
     """
-    return LLMWeaknessDetector(model=model, temperature=temperature)
+    return WeaknessDetectorAgent(model=model, temperature=temperature)
