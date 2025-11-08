@@ -44,6 +44,16 @@ class CalendarConnector:
     def create_event(self, payload: dict) -> None:
         if not isinstance(payload, dict):
             raise TypeError("Calendar payload must be provided as a dictionary.")
+
+        # Check if calendar is configured before attempting to create event
+        if not self.endpoint:
+            logger.info(
+                "Google Calendar MCP endpoint is not configured. "
+                "Event creation skipped. To enable calendar sync, set GOOGLE_CALENDAR_MCP_URL environment variable."
+            )
+            print("ℹ️  Calendar sync skipped (no MCP endpoint configured)")
+            return
+
         anyio.run(self._create_event_async, payload)
 
     async def _create_event_async(self, payload: dict) -> None:
