@@ -54,7 +54,13 @@ class CalendarConnector:
             print("ℹ️  Calendar sync skipped (no MCP endpoint configured)")
             return
 
-        anyio.run(self._create_event_async, payload)
+        try:
+            anyio.run(self._create_event_async, payload)
+        except Exception as exc:
+            # Handle any connection or runtime errors gracefully
+            logger.warning(f"Failed to create calendar event: {exc}")
+            print(f"⚠️  Calendar sync failed: {type(exc).__name__}")
+            # Don't raise - allow the system to continue
 
     async def _create_event_async(self, payload: dict) -> None:
         server_params = self._build_server_parameters()
