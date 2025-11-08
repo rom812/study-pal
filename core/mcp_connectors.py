@@ -65,6 +65,11 @@ class CalendarConnector:
                 result = await session.call_tool(tool_name, payload)
         except McpError as exc:
             raise RuntimeError(f"Google Calendar MCP interaction failed: {exc}") from exc
+        except Exception as exc:
+            # Handle connection errors gracefully
+            logger.warning(f"Failed to connect to calendar MCP server: {exc}")
+            print(f"⚠️  Calendar sync failed: Could not connect to MCP server at {self.endpoint}")
+            return
 
         if result.isError:
             message = self._summarize_error(result)
