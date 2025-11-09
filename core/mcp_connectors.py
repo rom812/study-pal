@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from dataclasses import dataclass, field
@@ -56,9 +57,12 @@ class CalendarConnector:
 
         try:
             anyio.run(self._create_event_async, payload)
+        except asyncio.CancelledError as exc:
+            logger.warning("Calendar MCP interaction cancelled: %s", exc)
+            print("⚠️  Calendar sync failed: MCP request cancelled")
         except Exception as exc:
             # Handle any connection or runtime errors gracefully
-            logger.warning(f"Failed to create calendar event: {exc}")
+            logger.warning("Failed to create calendar event: %s", exc)
             print(f"⚠️  Calendar sync failed: {type(exc).__name__}")
             # Don't raise - allow the system to continue
 
@@ -69,6 +73,10 @@ class CalendarConnector:
                 session = await group.connect_to_server(server_params)
                 tool_name = await self._resolve_tool_name(session)
                 result = await session.call_tool(tool_name, payload)
+        except asyncio.CancelledError as exc:
+            logger.warning("Calendar MCP connection cancelled: %s", exc)
+            print(f"⚠️  Calendar sync cancelled while contacting {self.endpoint}")
+            return
         except McpError as exc:
             raise RuntimeError(f"Google Calendar MCP interaction failed: {exc}") from exc
         except Exception as exc:

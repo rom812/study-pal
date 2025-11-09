@@ -41,7 +41,7 @@ class TutorChatbot:
     """
 
     tutor_agent: TutorAgent
-    model_name: str = "gpt-4"
+    model_name: str = "gpt-4o-mini"
     temperature: float = 0.7
     memory_k: int = 20  # Number of messages to remember (10 exchanges)
 
@@ -68,6 +68,7 @@ class TutorChatbot:
 
         print(f"[chatbot] Initialized with model: {self.model_name}")
         print(f"[chatbot] Memory: last {self.memory_k // 2} exchanges")
+        print(f"[chatbot] Cost-optimized: Using gpt-4o-mini for 98% cost savings")
 
     def chat(self, user_message: str, k: int = 3) -> str:
         """
@@ -186,14 +187,12 @@ class TutorChatbot:
             weak_points.append(weak_point)
 
         # Build recommendations from weak points
-        from core.weakness_analyzer import WeaknessAnalyzer
+        from core.weakness_analyzer import RecommendationBuilder
 
-        analyzer = WeaknessAnalyzer()
-
-        # Generate recommendations using the analyzer's helper methods
+        # Generate recommendations using the builder's helper methods
         priority_topics = [wp.topic for wp in weak_points[:5]]
-        suggested_focus_time = analyzer._calculate_focus_time(weak_points)
-        study_tips = analyzer._generate_study_tips(weak_points)
+        suggested_focus_time = RecommendationBuilder.calculate_focus_time(weak_points)
+        study_tips = RecommendationBuilder.generate_study_tips(weak_points)
         summary = result.get("session_summary", "Session analyzed")
 
         recommendations = SessionRecommendations(
@@ -387,20 +386,40 @@ class ChatInterface:
         print("  /ingest <path>        - Load a PDF file into knowledge base")
         print("  /count                - Show number of chunks in knowledge base")
         print("  /status               - Show system status")
-        print("  /finish               - Analyze session and get recommendations")
-        print("  /schedule             - Create tomorrow's study plan based on session analysis")
         print("  /clear                - Clear conversation history")
         print("  /clear-materials      - Clear all study materials")
         print("  /quit or /exit        - Exit the chatbot")
-        print("\n💬 Just type naturally to chat!")
+        print("\n💬 Natural Language Commands (with LangGraph):")
+        print("  'What is [topic]?'              - Ask tutoring questions")
+        print("  'Schedule my study time...'     - Create study schedules")
+        print("  'Analyze my weak points'        - Get session analysis")
+        print("  'I need motivation'             - Get motivational messages")
+        print("\n✨ Just chat naturally - the system figures out what you need!")
 
     def _print_status(self) -> None:
         """Print system status."""
         print("\n📊 System Status:")
-        print(f"  Model: {self.chatbot.model_name}")
-        print(f"  Temperature: {self.chatbot.temperature}")
-        print(f"  Knowledge base: {self.chatbot.get_materials_count()} chunks")
-        print(f"  {self.chatbot.get_conversation_summary()}")
+
+        # Check if this is LangGraph chatbot or legacy chatbot
+        from core.langgraph_chatbot import LangGraphChatbot
+
+        if isinstance(self.chatbot, LangGraphChatbot):
+            print(f"  Mode: LangGraph Multi-Agent System")
+            print(f"  User ID: {self.chatbot.user_id}")
+            print(f"  Knowledge base: {self.chatbot.get_materials_count()} chunks")
+            print(f"  {self.chatbot.get_conversation_summary()}")
+
+            # Show last detected intent
+            last_intent = self.chatbot.get_last_intent()
+            if last_intent != "unknown":
+                print(f"  Last detected intent: {last_intent}")
+        else:
+            # Legacy TutorChatbot
+            print(f"  Mode: Legacy Chatbot")
+            print(f"  Model: {self.chatbot.model_name}")
+            print(f"  Temperature: {self.chatbot.temperature}")
+            print(f"  Knowledge base: {self.chatbot.get_materials_count()} chunks")
+            print(f"  {self.chatbot.get_conversation_summary()}")
 
     def _handle_finish_session(self) -> None:
         """Analyze the session and display recommendations."""
@@ -484,6 +503,7 @@ class ChatInterface:
     def _handle_schedule_creation(self) -> None:
         """Create tomorrow's study schedule based on session analysis."""
         from agents.scheduler_agent import SchedulerAgent
+        from core.mcp_connectors import CalendarConnector
 
         # Check if we have recommendations from /finish
         if self.chatbot.last_recommendations is None:
@@ -510,8 +530,9 @@ class ChatInterface:
         }
 
         try:
-            # Create scheduler and generate schedule
-            scheduler = SchedulerAgent()
+            # Create scheduler with calendar connector
+            calendar_connector = CalendarConnector()
+            scheduler = SchedulerAgent(calendar_connector=calendar_connector)
             schedule = scheduler.generate_schedule(
                 context=context, recommendations=self.chatbot.last_recommendations
             )

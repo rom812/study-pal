@@ -2,12 +2,56 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_core.documents import Document
+
+
+def clean_spaced_text(text: str) -> str:
+    """
+    Clean text that has spaces between every character.
+
+    Example: "H e l l o  W o r l d" -> "Hello World"
+
+    Args:
+        text: Text with potential spacing issues
+
+    Returns:
+        Cleaned text
+    """
+    # Check if text appears to have the spacing issue
+    # (more than 30% of words are single characters)
+    words = text.split()
+    if not words:
+        return text
+
+    single_char_words = sum(1 for word in words if len(word) == 1 and word.isalnum())
+
+    if (single_char_words / len(words)) > 0.3:
+        # Likely has spacing issue
+        # Use regex to merge single characters that are likely part of words
+        # Pattern: match sequences of (single char + space) and merge them
+        result = text
+
+        # First pass: merge single letters/digits separated by single spaces
+        # e.g., "H e l l o" -> "Hello"
+        result = re.sub(r'\b(\w)\s+(?=\w\s|\w\b)', r'\1', result)
+
+        # Second pass: clean up any remaining obvious patterns
+        # e.g., "R o m" -> "Rom"
+        while True:
+            new_result = re.sub(r'\b(\w)\s+(\w)\s+(\w)', r'\1\2\3', result)
+            if new_result == result:
+                break
+            result = new_result
+
+        return result
+
+    return text
 
 
 class DocumentProcessor:
@@ -58,8 +102,11 @@ class DocumentProcessor:
             loader = PyPDFLoader(str(path))
             documents = loader.load()
 
-            # Add source metadata
+            # Clean and add source metadata
             for doc in documents:
+                # Clean spaced text if present
+                doc.page_content = clean_spaced_text(doc.page_content)
+
                 doc.metadata["source_file"] = path.name
                 doc.metadata["source_path"] = str(path)
 

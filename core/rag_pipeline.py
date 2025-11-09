@@ -27,7 +27,7 @@ class RAGPipeline:
     5. Provide semantic search and retrieval
     """
 
-    embedding_model: str = "text-embedding-3-large"
+    embedding_model: str = "text-embedding-3-small"
     collection_name: str = "study_materials"
     persist_directory: Path = field(default_factory=lambda: Path("data/chroma_db"))
     chunk_size: int = 1000

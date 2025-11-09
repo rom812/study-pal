@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Protocol
@@ -26,6 +28,9 @@ class ConversationModel(Protocol):
 
 DEFAULT_POMODORO_MINUTES = 25
 DEFAULT_BREAK_MINUTES = 5
+DEFAULT_START_TIME = "09:00"
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -59,7 +64,7 @@ class SchedulerAgent:
             raise ValueError("Context must include 'user_input' describing availability and subjects.")
 
         llm = self._ensure_llm()
-        preferences = self._collect_preferences(user_input, llm)
+        preferences = self._collect_preferences(user_input, llm, context)
 
         # If we have recommendations, adjust the subject prioritization
         if recommendations and recommendations.weak_points:
@@ -126,12 +131,26 @@ class SchedulerAgent:
             "timeZone": "Asia/Jerusalem",  # Israel timezone
         }
 
-    def _ensure_llm(self) -> ConversationModel:
-        if self.llm is None:
+    def _ensure_llm(self) -> ConversationModel | None:
+        if self.llm is not None:
+            return self.llm
+
+        try:
             self.llm = OpenAIConversationModel()
+        except Exception as exc:  # pragma: no cover - runtime fallback
+            logger.warning(
+                "OpenAIConversationModel unavailable (%s). Falling back to heuristic scheduler.",
+                exc,
+            )
+            self.llm = None
         return self.llm
 
-    def _collect_preferences(self, user_input: str, llm: ConversationModel) -> dict:
+    def _collect_preferences(
+        self,
+        user_input: str,
+        llm: ConversationModel | None,
+        context: dict | None,
+    ) -> dict:
         prompt = (
             "You are Study Pal's scheduling assistant.\n"
             "Extract the user's study availability and subjects from the note below and respond ONLY with JSON.\n"
@@ -139,8 +158,18 @@ class SchedulerAgent:
             "Optional key: notes (string) for assumptions or clarifications.\n"
             f"USER_NOTE: {user_input}\n"
         )
-        raw_response = llm.generate(prompt)
-        preferences = self._parse_preferences(raw_response)
+        if llm is None:
+            preferences = self._heuristic_preferences(user_input, context)
+        else:
+            try:
+                raw_response = llm.generate(prompt)
+                preferences = self._parse_preferences(raw_response)
+            except Exception as exc:  # pragma: no cover - runtime fallback
+                logger.warning(
+                    "Scheduler LLM response failed (%s). Using heuristic fallback.",
+                    exc,
+                )
+                preferences = self._heuristic_preferences(user_input, context)
         preferences.setdefault("notes", "")
         return preferences
 
@@ -272,6 +301,110 @@ class SchedulerAgent:
         preferences["moderate_topics"] = moderate_topics
 
         return preferences
+
+    def _heuristic_preferences(self, user_input: str, context: dict | None) -> dict:
+        start_time, end_time = self._extract_time_range(user_input)
+        subjects = self._extract_subjects(user_input)
+
+        if context:
+            topic = context.get("topic")
+            if topic and topic not in subjects:
+                subjects.append(topic)
+
+        if not subjects:
+            subjects = ["General Study"]
+
+        start_time = start_time or DEFAULT_START_TIME
+        end_time = end_time or self._add_minutes(start_time, 60)
+
+        if self._time_to_minutes(end_time) <= self._time_to_minutes(start_time):
+            end_time = self._add_minutes(start_time, 60)
+
+        return {
+            "start_time": start_time,
+            "end_time": end_time,
+            "subjects": subjects,
+            "notes": "Generated via heuristic parser (LLM unavailable).",
+        }
+
+    def _extract_time_range(self, text: str) -> tuple[str | None, str | None]:
+        range_pattern = re.compile(
+            r"(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:-|to)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?",
+            re.IGNORECASE,
+        )
+        match = range_pattern.search(text)
+        if match:
+            start = self._format_time(match.group(1), match.group(2), match.group(3), match.group(6))
+            end = self._format_time(match.group(4), match.group(5), match.group(6), match.group(3))
+            return start, end
+
+        single_pattern = re.compile(r"\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b", re.IGNORECASE)
+        times = single_pattern.findall(text)
+        if len(times) >= 2:
+            start = self._format_time(*times[0])
+            end = self._format_time(*times[1])
+            return start, end
+        if len(times) == 1:
+            start = self._format_time(*times[0])
+            end = self._add_minutes(start, 60)
+            return start, end
+        return None, None
+
+    def _format_time(
+        self,
+        hour: str,
+        minute: str | None,
+        ampm: str | None,
+        fallback_ampm: str | None = None,
+    ) -> str:
+        hour_val = int(hour)
+        minute_val = int(minute or 0)
+        marker = (ampm or fallback_ampm or "").lower()
+
+        if marker:
+            hour_val = hour_val % 12
+            if marker == "pm":
+                hour_val += 12
+        return f"{hour_val:02d}:{minute_val:02d}"
+
+    def _add_minutes(self, time_str: str, minutes: int) -> str:
+        base = datetime.strptime(time_str, "%H:%M")
+        updated = base + timedelta(minutes=minutes)
+        return updated.strftime("%H:%M")
+
+    def _time_to_minutes(self, time_str: str) -> int:
+        hour, minute = map(int, time_str.split(":"))
+        return hour * 60 + minute
+
+    def _extract_subjects(self, text: str) -> list[str]:
+        chunks: list[str] = []
+        markers = [
+            r"focus on\s+([^.]+)",
+            r"study\s+([^.]+)",
+            r"studying\s+([^.]+)",
+            r"work on\s+([^.]+)",
+            r"review\s+([^.]+)",
+            r"subjects?\s*:\s*([^.]+)",
+            r"topics?\s*:\s*([^.]+)",
+        ]
+        for pattern in markers:
+            match = re.search(pattern, text, flags=re.IGNORECASE)
+            if match:
+                chunks.append(match.group(1))
+
+        subjects: list[str] = []
+        seen: set[str] = set()
+        for chunk in chunks:
+            parts = re.split(r",|/|\band\b|\bthen\b|&", chunk, flags=re.IGNORECASE)
+            for part in parts:
+                subject = part.strip(" .")
+                if not subject:
+                    continue
+                key = subject.lower()
+                if key not in seen:
+                    seen.add(key)
+                    subjects.append(subject)
+        return subjects
 
     def _parse_clock(self, value: str) -> datetime:
         try:

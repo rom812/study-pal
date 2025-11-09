@@ -189,7 +189,7 @@ def check_and_load_profile(user_id: str = "default_user") -> bool:
         return False
 
 
-def start_chatbot(user_id: str = "default_user"):
+def start_chatbot(user_id: str = "default_user", use_langgraph: bool = True):
     """Start the interactive chatbot."""
     # Check for user profile
     if not check_and_load_profile(user_id):
@@ -198,19 +198,32 @@ def start_chatbot(user_id: str = "default_user"):
         run_onboarding(user_id)
         print()
 
-    print("🚀 Starting Study Pal Chatbot...")
-    print("   Initializing RAG pipeline and AI tutor...\n")
+    if use_langgraph:
+        print("🚀 Starting Study Pal LangGraph Multi-Agent System...")
+        print("   All agents (Tutor, Scheduler, Analyzer, Motivator) are ready!\n")
 
-    # Initialize RAG pipeline and tutor agent
-    rag_pipeline = RAGPipeline()
-    tutor_agent = TutorAgent(rag_pipeline=rag_pipeline)
+        # Use the new LangGraph chatbot
+        from core.langgraph_chatbot import LangGraphChatbot
 
-    # Create chatbot
-    chatbot = TutorChatbot(tutor_agent=tutor_agent)
+        chatbot = LangGraphChatbot(user_id=user_id, session_id=user_id)
 
-    # Start chat interface
-    chat_interface = ChatInterface(chatbot=chatbot)
-    chat_interface.run()
+        # Start chat interface with LangGraph bot
+        chat_interface = ChatInterface(chatbot=chatbot)
+        chat_interface.run()
+    else:
+        print("🚀 Starting Study Pal Chatbot (Legacy Mode)...")
+        print("   Initializing RAG pipeline and AI tutor...\n")
+
+        # Initialize RAG pipeline and tutor agent
+        rag_pipeline = RAGPipeline()
+        tutor_agent = TutorAgent(rag_pipeline=rag_pipeline)
+
+        # Create chatbot
+        chatbot = TutorChatbot(tutor_agent=tutor_agent)
+
+        # Start chat interface
+        chat_interface = ChatInterface(chatbot=chatbot)
+        chat_interface.run()
 
 
 if __name__ == "__main__":
