@@ -26,6 +26,7 @@ ENV/
 /data/logs/
 /data/test_profiles/
 /data/profiles/
+/data/chroma_db/
 
 # Credentials and secrets
 configs/credentials.json

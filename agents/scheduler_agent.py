@@ -47,14 +47,14 @@ class SchedulerAgent:
     def generate_schedule(
         self,
         context: dict,
-        recommendations: SessionRecommendations | None = None,
+        recommendations: "SessionRecommendations | dict | None" = None,
     ) -> dict:
         """
         Create a schedule from conversational context, optionally prioritizing weak points.
 
         Args:
             context: Dictionary containing user_input with availability and subjects
-            recommendations: Optional SessionRecommendations from tutor analysis to prioritize weak topics
+            recommendations: Optional SessionRecommendations or dict from tutor analysis to prioritize weak topics
 
         Returns:
             Schedule dictionary with preferences and sessions
@@ -66,8 +66,12 @@ class SchedulerAgent:
         llm = self._ensure_llm()
         preferences = self._collect_preferences(user_input, llm, context)
 
+        # Convert dict to SessionRecommendations if needed
+        if isinstance(recommendations, dict):
+            recommendations = self._dict_to_recommendations(recommendations)
+
         # If we have recommendations, adjust the subject prioritization
-        if recommendations and recommendations.weak_points:
+        if recommendations and hasattr(recommendations, 'weak_points') and recommendations.weak_points:
             preferences = self._prioritize_weak_topics(preferences, recommendations)
 
         sessions = self._build_pomodoro_plan(preferences)
@@ -76,11 +80,40 @@ class SchedulerAgent:
         schedule = {
             "preferences": preferences,
             "sessions": sessions,
-            "based_on_weak_points": recommendations is not None and len(recommendations.weak_points) > 0,
+            "based_on_weak_points": recommendations is not None and (
+                hasattr(recommendations, 'weak_points') and len(recommendations.weak_points) > 0
+            ),
         }
 
         self._last_schedule = schedule
         return schedule
+
+    def _dict_to_recommendations(self, data: dict) -> "SessionRecommendations":
+        """Convert a dict (from LangGraph state) to SessionRecommendations object."""
+        from core.weakness_analyzer import SessionRecommendations, WeakPoint
+
+        # Extract weak points from dict
+        weak_points_data = data.get("weak_points", [])
+        weak_points = []
+
+        for wp_data in weak_points_data:
+            weak_point = WeakPoint(
+                topic=wp_data.get("topic", "unknown"),
+                difficulty_level=wp_data.get("difficulty_level", "mild"),
+                evidence=wp_data.get("evidence", []),
+                frequency=wp_data.get("frequency", 1),
+                confusion_indicators=wp_data.get("confusion_indicators", 0),
+            )
+            weak_points.append(weak_point)
+
+        # Build SessionRecommendations
+        return SessionRecommendations(
+            weak_points=weak_points,
+            priority_topics=[wp.topic for wp in weak_points[:5]],
+            suggested_focus_time={wp.topic: 15 for wp in weak_points},
+            study_approach_tips=data.get("study_approach_tips", []),
+            session_summary=data.get("session_summary", "Session analyzed"),
+        )
 
     def sync_schedule(self, schedule: dict) -> None:
         """Persist the latest schedule by creating calendar events."""

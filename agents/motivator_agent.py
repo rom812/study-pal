@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import random
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
@@ -16,21 +15,13 @@ except ImportError:  # pragma: no cover
 
 from pydantic import BaseModel, Field
 
-from .quote_store import Quote, QuoteStore
+from .quote_store import Quote
 from .user_profile import UserProfile, UserProfileStore
 
 try:
-    from .quote_scraper import WebSearchQuoteScraper, PersonalizedQuoteGenerator
+    from .quote_scraper import WebSearchQuoteScraper
 except ImportError:
     WebSearchQuoteScraper = None  # type: ignore[assignment, misc]
-    PersonalizedQuoteGenerator = None  # type: ignore[assignment, misc]
-
-
-class InspirationFetcher(Protocol):
-    """External data source for quotes or stories."""
-
-    def fetch(self, persona: str) -> dict:
-        ...
 
 
 class MotivationLLM(Protocol):
@@ -40,9 +31,8 @@ class MotivationLLM(Protocol):
         self,
         *,
         persona: str,
-        quote: Quote | None,
-        profile: UserProfile | None,
-        tag: str | None,
+        quote: Quote,
+        profile: UserProfile,
     ) -> str:
         ...
 
@@ -59,63 +49,44 @@ class MotivationMessage(BaseModel):
 
 @dataclass
 class MotivatorAgent:
-    """Produces motivational messaging cycles."""
+    """Produces personalized motivational messages using web-scraped quotes."""
 
-    fetcher: InspirationFetcher | None = None
     profile_store: UserProfileStore | None = None
-    quote_store: QuoteStore | None = None
     llm: MotivationLLM | None = None
 
-    def craft_message(
+    def craft_personalized_message(
         self,
         user_id: str,
-        persona: str | None = None,
-        tag: str | None = None,
-    ) -> MotivationMessage:
-        """Return a persona-specific motivational message."""
-        profile = self._load_profile(user_id) if self.profile_store else None
-        persona_to_use = persona or (profile.primary_persona if profile else "default")
-
-        quote = self._select_quote(persona_to_use, profile, tag)
-
-        text, source = self._compose_message(persona_to_use, profile, quote, tag, user_id)
-
-        message = MotivationMessage(
-            text=text,
-            source=source,
-            persona_style=persona_to_use,
-            user_name=profile.name if profile else None,
-        )
-
-        if profile and self.profile_store:
-            profile.last_motivation_at = message.timestamp
-            self.profile_store.save(profile)
-
-        return message
-
-    def craft_message_from_web(
-        self,
-        user_id: str,
-        persona: str,
         scraper: WebSearchQuoteScraper | None = None,
-        personalizer: PersonalizedQuoteGenerator | None = None,
-        save_to_store: bool = True,
     ) -> MotivationMessage:
         """
-        Scrape quotes from the web for a persona and create a deeply personalized message.
+        Create a personalized motivational message for the user.
+
+        This is the main entry point for generating motivation:
+        1. Loads user profile (with weaknesses, persona, name, goals)
+        2. Scrapes a quote from the web for the user's primary persona
+        3. Uses LLM to craft a personalized message addressing their weaknesses
+
+        Example flow:
+            Profile: name="Rom", persona="DJ Khaled", weaknesses=["procrastination"], goal="finding a job"
+            Output: "Don't play yourself" — DJ Khaled
+                    Rom, I know you're struggling with procrastination, but don't ever play yourself!
+                    You only have one life and you must grasp it and find that job.
 
         Args:
-            user_id: The user to create the message for
-            persona: The persona to scrape quotes from (e.g., "Isaac Newton", "Marie Curie")
+            user_id: User identifier
             scraper: Optional quote scraper (creates default if None)
-            personalizer: Optional personalizer (creates default if None)
-            save_to_store: If True, saves the scraped quote to the quote store
 
         Returns:
             MotivationMessage with personalized content
         """
         # Load user profile
         profile = self._load_profile(user_id) if self.profile_store else None
+
+        if not profile:
+            raise ValueError(f"No profile found for user_id: {user_id}")
+
+        persona = profile.primary_persona or "default"
 
         # Create scraper if not provided
         if scraper is None:
@@ -133,214 +104,39 @@ class MotivatorAgent:
         if not quotes:
             raise RuntimeError(f"No quotes found for persona: {persona}")
 
-        # Select the best quote (first one for now, could be randomized)
+        # Select first quote
         quote = quotes[0]
+        print(f"[motivator] Selected quote: {quote.text[:50]}...")
 
-        # Save to quote store if requested
-        if save_to_store and self.quote_store:
-            self.quote_store.add([quote])
-            print(f"[motivator] Added quote to store: {quote.text[:50]}...")
-
-        # Create personalized message
-        if personalizer is None:
-            if PersonalizedQuoteGenerator is None:
-                raise ImportError(
-                    "PersonalizedQuoteGenerator is not available. "
-                    "Ensure quote_scraper.py is imported correctly."
-                )
-            personalizer = PersonalizedQuoteGenerator()
-
-        # Build user profile dict for personalization
-        user_profile_dict = {
-            "name": profile.name if profile else user_id,
-            "user_id": user_id,
-        }
-
-        if profile:
-            user_profile_dict.update({
-                "current_focus": profile.current_focus,
-                "study_topics": profile.study_topics,
-                "traits": profile.traits,
-                "goals": profile.goals,
-                "primary_persona": profile.primary_persona,
-            })
+        # Generate personalized message using LLM
+        if not self.llm:
+            raise RuntimeError("LLM is required for personalized message generation")
 
         print(f"[motivator] Generating personalized message...")
-        text = personalizer.generate_personalized_message(quote, user_profile_dict)
+        text = self.llm.generate(
+            persona=persona,
+            quote=quote,
+            profile=profile,
+        )
 
         # Create the message
         message = MotivationMessage(
             text=text,
             source=str(quote.source_url) if quote.source_url else "web_search",
             persona_style=persona,
-            user_name=profile.name if profile else None,
+            user_name=profile.name,
         )
 
         # Update profile
-        if profile and self.profile_store:
+        if self.profile_store:
             profile.last_motivation_at = message.timestamp
             self.profile_store.save(profile)
 
         return message
 
-    def craft_messages_from_user_personas(
-        self,
-        user_id: str,
-        scraper: WebSearchQuoteScraper | None = None,
-        personalizer: PersonalizedQuoteGenerator | None = None,
-        save_to_store: bool = True,
-    ) -> list[MotivationMessage]:
-        """
-        Generate motivational messages from all personas in the user's profile.
-
-        This method automatically retrieves all personas (primary + preferred) from the
-        user's profile and creates a personalized message for each one by scraping
-        quotes from the web.
-
-        Args:
-            user_id: The user to create messages for
-            scraper: Optional quote scraper (creates default if None)
-            personalizer: Optional personalizer (creates default if None)
-            save_to_store: If True, saves the scraped quotes to the quote store
-
-        Returns:
-            List of MotivationMessage objects, one for each persona
-        """
-        # Load user profile
-        profile = self._load_profile(user_id) if self.profile_store else None
-
-        if not profile:
-            raise ValueError(f"No profile found for user_id: {user_id}")
-
-        # Get all personas from user profile
-        personas = profile.get_personas()
-
-        if not personas:
-            raise ValueError(f"No personas found in profile for user_id: {user_id}")
-
-        print(f"[motivator] Generating messages for {len(personas)} personas: {', '.join(personas)}")
-
-        # Generate message for each persona
-        messages = []
-        for persona in personas:
-            try:
-                message = self.craft_message_from_web(
-                    user_id=user_id,
-                    persona=persona,
-                    scraper=scraper,
-                    personalizer=personalizer,
-                    save_to_store=save_to_store,
-                )
-                messages.append(message)
-            except Exception as e:
-                print(f"[motivator] Warning: Failed to generate message for {persona}: {e}")
-                continue
-
-        return messages
-
-    # ------------------------------------------------------------------
-    # Message generation helpers
-    # ------------------------------------------------------------------
-    def _compose_message(
-        self,
-        persona: str,
-        profile: UserProfile | None,
-        quote: Quote | None,
-        tag: str | None,
-        user_id: str,
-    ) -> tuple[str, str]:
-        """Compose the message using the LLM when available."""
-        if self.llm:
-            try:
-                text = self.llm.generate(
-                    persona=persona,
-                    quote=quote,
-                    profile=profile,
-                    tag=tag,
-                )
-                if text.strip():
-                    source = (
-                        str(quote.source_url)
-                        if quote and quote.source_url
-                        else ("quote_store" if quote else "openai")
-                    )
-                    return text.strip(), source
-            except Exception as exc:  # pragma: no cover - LLM errors fallback
-                print(f"[motivator] LLM generation failed: {exc}")
-
-        # Fallback path
-        if quote:
-            recipient = profile.name if profile else user_id
-            focus = self._determine_focus(profile)
-            quote_line = f"“{quote.text}” — {quote.persona}"
-            personal_line = f"{recipient}, keep pushing toward {focus}."
-            text = f"{quote_line}\n{personal_line}"
-            source = str(quote.source_url) if quote.source_url else "quote_store"
-        else:
-            data = self.fetcher.fetch(persona) if self.fetcher else {}
-            text = data.get("text", "Stay focused – greatness is built daily.")
-            source = data.get("source", "fallback")
-
-        return text, source
-
-    def _select_quote(
-        self,
-        persona: str,
-        profile: UserProfile | None,
-        tag: str | None,
-    ) -> Quote | None:
-        if not self.quote_store:
-            return None
-
-        candidate_quotes: list[Quote] = []
-        if tag:
-            candidate_quotes.extend(self.quote_store.search_by_tag(tag, persona=persona))
-        else:
-            candidate_quotes.extend(self.quote_store.get_by_persona(persona))
-
-        if profile and not candidate_quotes:
-            desired_tags = self._derive_tags(profile)
-            for desired_tag in desired_tags:
-                candidate_quotes.extend(self.quote_store.search_by_tag(desired_tag, persona=persona))
-
-        if not candidate_quotes:
-            return None
-
-        if profile:
-            index = hash(profile.user_id + persona) % len(candidate_quotes)
-            return candidate_quotes[index]
-
-        return random.choice(candidate_quotes)
-
-    @staticmethod
-    def _derive_tags(profile: UserProfile) -> list[str]:
-        trait_to_tag = {
-            "procrastination": "focus",
-            "burnout": "rest",
-            "perfectionism": "self-belief",
-            "fatigue": "rest",
-            "doubt": "self-belief",
-            "overwhelmed": "perseverance",
-        }
-
-        tags: list[str] = []
-        for trait in profile.traits:
-            mapped = trait_to_tag.get(trait.lower())
-            if mapped and mapped not in tags:
-                tags.append(mapped)
-        return tags
-
-    @staticmethod
-    def _determine_focus(profile: UserProfile | None) -> str:
-        if profile:
-            if profile.current_focus:
-                return profile.current_focus
-            if profile.study_topics:
-                return profile.study_topics[0]
-        return "your goals"
-
     def _load_profile(self, user_id: str) -> UserProfile:
-        assert self.profile_store is not None  # For type checking
+        """Load or create user profile."""
+        assert self.profile_store is not None
         try:
             return self.profile_store.load(user_id)
         except FileNotFoundError:
@@ -356,11 +152,18 @@ class OpenAIMotivationModel:
         "You are Study Pal's Motivator Agent. "
         "You speak on behalf of the chosen persona to encourage a student. "
         "Always follow this structure:\n"
-        "1) First line: an exact quote from the persona (if provided), formatted as “quote” — Persona Name. "
+        "1) First line: an exact quote from the persona (if provided), formatted as \"quote\" — Persona Name. "
         "   If no quote is provided, craft a short, persona-aligned mantra.\n"
-        "2) Second line: a personalised message directly addressing the student by name. "
-        "   Reference their study goals, current focus, or traits. Be uplifting but concise (max 2 sentences).\n"
-        "Never add additional commentary. Avoid emojis. Stay authentic to the persona's tone."
+        "2) Second line: a personalized message directly addressing the student by name. "
+        "   Reference their weaknesses/struggles, study goals, or current focus. "
+        "   Acknowledge their challenges and provide authentic encouragement in the persona's voice. "
+        "   Be uplifting but concise (2-3 sentences max).\n\n"
+        "Example:\n"
+        "Input: persona=DJ Khaled, name=Rom, weaknesses=[procrastination], main_goal=finding a job\n"
+        "Output: \"Don't play yourself\" — DJ Khaled\n"
+        "Rom, I know you're struggling with procrastination, but don't ever play yourself! "
+        "You only have one life and you must grasp it and find that job. The key to success is taking action today.\n\n"
+        "Never add extra commentary. Avoid emojis. Stay authentic to the persona's tone and speaking style."
     )
 
     def __init__(
@@ -385,15 +188,14 @@ class OpenAIMotivationModel:
         self,
         *,
         persona: str,
-        quote: Quote | None,
-        profile: UserProfile | None,
-        tag: str | None,
+        quote: Quote,
+        profile: UserProfile,
     ) -> str:
+        """Generate personalized motivational message using the quote and user profile."""
         payload = {
             "persona": persona,
-            "quote": quote.model_dump(mode="json", exclude_none=True) if quote else None,
-            "user_profile": profile.model_dump(mode="json", exclude_none=True) if profile else None,
-            "requested_tag": tag,
+            "quote": quote.model_dump(mode="json", exclude_none=True),
+            "user_profile": profile.model_dump(mode="json", exclude_none=True),
         }
 
         messages = [
