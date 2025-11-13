@@ -51,10 +51,11 @@ class StudyPalState(TypedDict):
     current_intent: Optional[str]  # "tutor", "schedule", "analyze", "motivate"
 
     # Analysis results from tutor sessions
-    weak_points: Optional[dict]  # Results from weakness analysis
+    weak_points: Optional[Any]  # Results from weakness analysis
 
     # Schedule information
     generated_schedule: Optional[dict]  # Generated study schedule
+    schedule_plan: Optional[dict]  # Detailed plan for current/next session
 
     # Control flow - tells the graph where to go next
     next_agent: Optional[str]  # Which agent should run next
@@ -62,16 +63,45 @@ class StudyPalState(TypedDict):
 
     # === NEW: Multi-agent orchestration fields ===
     # Tracks the current mode of the workflow for sophisticated routing
-    session_mode: Optional[Literal["active_tutoring", "analysis_requested", "scheduling_requested", "complete"]]
+    session_mode: Optional[
+        Literal[
+            "scheduling_requested",
+            "scheduled",
+            "active_tutoring",
+            "analysis_requested",
+            "analysis_completed",
+            "motivation_requested",
+            "complete",
+        ]
+    ]
 
     # Indicates if the user is actively in a tutoring loop (enables Tutor → Tutor loops)
     tutor_session_active: bool
 
     # Stores analyzer output so the scheduler can reference it (enables Analyzer → Scheduler handoff)
-    analysis_results: Optional[dict]
+    analysis_results: Optional[Any]
+    session_analysis: Optional[Any]
 
     # Flag indicating user wants scheduling after analysis (enables conditional Analyzer → Scheduler)
     user_wants_scheduling: bool
 
+    # Flag indicating the user (or system) wants a motivational message
+    needs_motivation: bool
+
+    # Indicates if scheduler should hand off immediately into tutoring
+    start_tutor_after_schedule: bool
+    ready_for_tutoring: bool
+
+    # Tracks whether the user signaled an exit from tutoring during the current turn
+    tutor_exit_requested: bool
+
+    # Scheduling follow-up flags
+    awaiting_schedule_confirmation: bool  # Analyzer asked if user wants another session
+    awaiting_schedule_details: bool  # Scheduler requested specific availability
+    pending_schedule_request: Optional[str]  # Raw user text describing desired timing
+
     # Shared resources - persist across agents
     rag_pipeline: Optional[Any]  # Shared RAG pipeline instance
+
+    # Optional profile/context info used by motivator
+    user_profile: Optional[dict]

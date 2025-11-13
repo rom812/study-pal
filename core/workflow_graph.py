@@ -31,6 +31,9 @@ from core.workflow_nodes import (
     scheduler_agent_node,
     analyzer_agent_node,
     motivator_agent_node,
+    route_after_scheduler,
+    route_after_tutor,
+    route_after_analyzer,
 )
 
 logger = logging.getLogger(__name__)
@@ -88,29 +91,60 @@ def create_study_pal_graph():
         Returns:
             Name of the next node to visit
         """
-        next_node = state.get("next_agent", "tutor")
+        next_node = state.get("next_agent") or "__end__"
+        valid_targets = {"tutor", "scheduler", "analyzer", "motivator"}
+
+        if next_node not in valid_targets:
+            logger.info(f"      Routing to: END (next_agent={next_node})")
+            return "__end__"
+
         logger.info(f"      Routing to: {next_node}")
         return next_node
 
     # Add the conditional edge: from intent_router, decide where to go
     graph_builder.add_conditional_edges(
-        "intent_router",  # From this node
-        route_after_intent,  # Use this function to decide
+        "intent_router",
+        route_after_intent,
         {
-            # Map of possible outputs → where to go
             "tutor": "tutor",
             "scheduler": "scheduler",
             "analyzer": "analyzer",
             "motivator": "motivator",
-        }
+            "__end__": END,
+        },
     )
 
-    # Step 5: Add edges from each agent to END
-    # After each agent finishes, we're done
-    logger.info("   Adding edges to END...")
-    graph_builder.add_edge("tutor", END)
-    graph_builder.add_edge("scheduler", END)
-    graph_builder.add_edge("analyzer", END)
+    # Step 5: Add orchestration edges between agents
+    logger.info("   Adding routing edges...")
+    graph_builder.add_conditional_edges(
+        "scheduler",
+        route_after_scheduler,
+        {
+            "tutor": "tutor",
+            "motivator": "motivator",
+            "__end__": END,
+        },
+    )
+
+    graph_builder.add_conditional_edges(
+        "tutor",
+        route_after_tutor,
+        {
+            "analyzer": "analyzer",
+            "__end__": END,
+        },
+    )
+
+    graph_builder.add_conditional_edges(
+        "analyzer",
+        route_after_analyzer,
+        {
+            "scheduler": "scheduler",
+            "motivator": "motivator",
+            "__end__": END,
+        },
+    )
+
     graph_builder.add_edge("motivator", END)
 
     # Step 6: Add memory so conversations are remembered
@@ -163,6 +197,21 @@ def run_workflow(user_message: str, user_id: str = "default_user", session_id: s
         "generated_schedule": None,
         "next_agent": None,
         "workflow_complete": False,
+        "schedule_plan": None,
+        "session_mode": None,
+        "tutor_session_active": False,
+        "analysis_results": None,
+        "session_analysis": None,
+        "user_wants_scheduling": False,
+        "needs_motivation": False,
+        "start_tutor_after_schedule": False,
+        "ready_for_tutoring": False,
+        "tutor_exit_requested": False,
+        "rag_pipeline": None,
+        "user_profile": None,
+        "awaiting_schedule_confirmation": False,
+        "awaiting_schedule_details": False,
+        "pending_schedule_request": None,
     }
 
     # Configuration for memory (so it remembers this conversation)
@@ -208,6 +257,21 @@ def stream_workflow(user_message: str, user_id: str = "default_user", session_id
         "generated_schedule": None,
         "next_agent": None,
         "workflow_complete": False,
+        "schedule_plan": None,
+        "session_mode": None,
+        "tutor_session_active": False,
+        "analysis_results": None,
+        "session_analysis": None,
+        "user_wants_scheduling": False,
+        "needs_motivation": False,
+        "start_tutor_after_schedule": False,
+        "ready_for_tutoring": False,
+        "tutor_exit_requested": False,
+        "rag_pipeline": None,
+        "user_profile": None,
+        "awaiting_schedule_confirmation": False,
+        "awaiting_schedule_details": False,
+        "pending_schedule_request": None,
     }
 
     config = {"configurable": {"thread_id": session_id}}
