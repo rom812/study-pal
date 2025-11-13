@@ -5,7 +5,7 @@ This module defines the shared state that all agents use to communicate.
 Think of it as a shared notebook where agents write their results and read what others wrote.
 """
 
-from typing import Annotated, Optional, Any
+from typing import Annotated, Optional, Any, Literal
 from typing_extensions import TypedDict
 from langgraph.graph.message import add_messages
 from langchain_core.messages import BaseMessage
@@ -59,6 +59,19 @@ class StudyPalState(TypedDict):
     # Control flow - tells the graph where to go next
     next_agent: Optional[str]  # Which agent should run next
     workflow_complete: bool  # Should we stop the workflow?
+
+    # === NEW: Multi-agent orchestration fields ===
+    # Tracks the current mode of the workflow for sophisticated routing
+    session_mode: Optional[Literal["active_tutoring", "analysis_requested", "scheduling_requested", "complete"]]
+
+    # Indicates if the user is actively in a tutoring loop (enables Tutor → Tutor loops)
+    tutor_session_active: bool
+
+    # Stores analyzer output so the scheduler can reference it (enables Analyzer → Scheduler handoff)
+    analysis_results: Optional[dict]
+
+    # Flag indicating user wants scheduling after analysis (enables conditional Analyzer → Scheduler)
+    user_wants_scheduling: bool
 
     # Shared resources - persist across agents
     rag_pipeline: Optional[Any]  # Shared RAG pipeline instance

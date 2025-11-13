@@ -14,8 +14,6 @@ from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_openai import ChatOpenAI
 
 from agents.tutor_agent import TutorAgent
-from agents.weakness_detector_agent import WeaknessDetectorAgent
-from core.weakness_analyzer import SessionRecommendations, WeakPoint
 
 
 @dataclass
@@ -48,7 +46,6 @@ class TutorChatbot:
     # These will be initialized in __post_init__
     memory: ChatMessageHistory = field(init=False)
     llm: ChatOpenAI = field(init=False)
-    last_recommendations: SessionRecommendations | None = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
         """Initialize the chatbot components."""
@@ -159,54 +156,6 @@ class TutorChatbot:
             num_exchanges = num_messages // 2
             return f"Conversation: {num_messages} messages ({num_exchanges} exchanges)"
         return "Conversation: No messages yet"
-
-    def analyze_session(self, session_topic: str | None = None) -> SessionRecommendations:
-        """
-        Analyze the current tutoring session to identify weak points and generate recommendations.
-
-        Args:
-            session_topic: Optional topic that was studied during the session
-
-        Returns:
-            SessionRecommendations with weak points and study suggestions
-        """
-        # Use the weakness detector agent for LLM-based analysis
-        detector = WeaknessDetectorAgent(model="gpt-4o-mini")
-        result = detector.analyze_conversation(self.memory.messages, session_topic=session_topic)
-
-        # Convert LLM result to WeakPoint objects
-        weak_points = []
-        for wp_data in result.get("weak_points", []):
-            weak_point = WeakPoint(
-                topic=wp_data.get("topic", "unknown"),
-                difficulty_level=wp_data.get("difficulty_level", "mild"),
-                evidence=wp_data.get("evidence", []),
-                frequency=1,
-                confusion_indicators=len(wp_data.get("evidence", [])),
-            )
-            weak_points.append(weak_point)
-
-        # Build recommendations from weak points
-        from core.weakness_analyzer import RecommendationBuilder
-
-        # Generate recommendations using the builder's helper methods
-        priority_topics = [wp.topic for wp in weak_points[:5]]
-        suggested_focus_time = RecommendationBuilder.calculate_focus_time(weak_points)
-        study_tips = RecommendationBuilder.generate_study_tips(weak_points)
-        summary = result.get("session_summary", "Session analyzed")
-
-        recommendations = SessionRecommendations(
-            weak_points=weak_points,
-            priority_topics=priority_topics,
-            suggested_focus_time=suggested_focus_time,
-            study_approach_tips=study_tips,
-            session_summary=summary,
-        )
-
-        # Save recommendations for scheduler integration
-        self.last_recommendations = recommendations
-
-        return recommendations
 
     def _build_system_prompt(self, context_chunks: list[str]) -> str:
         """
@@ -353,12 +302,6 @@ class ChatInterface:
         elif cmd == "/status":
             self._print_status()
 
-        elif cmd == "/finish":
-            self._handle_finish_session()
-
-        elif cmd == "/schedule":
-            self._handle_schedule_creation()
-
         else:
             print(f"❌ Unknown command: {cmd}")
             print("💡 Type /help for available commands")
@@ -389,12 +332,13 @@ class ChatInterface:
         print("  /clear                - Clear conversation history")
         print("  /clear-materials      - Clear all study materials")
         print("  /quit or /exit        - Exit the chatbot")
-        print("\n💬 Natural Language Commands (with LangGraph):")
-        print("  'What is [topic]?'              - Ask tutoring questions")
-        print("  'Schedule my study time...'     - Create study schedules")
-        print("  'Analyze my weak points'        - Get session analysis")
-        print("  'I need motivation'             - Get motivational messages")
-        print("\n✨ Just chat naturally - the system figures out what you need!")
+        print("\n💬 Natural Language (LangGraph Multi-Agent System):")
+        print("  Just chat naturally! The system automatically routes to the right agent:")
+        print("  • 'What is [topic]?'              → Tutor agent (Q&A)")
+        print("  • 'Analyze my weak points'        → Analyzer agent")
+        print("  • 'Create a study schedule...'    → Scheduler agent")
+        print("  • 'I need motivation'             → Motivator agent")
+        print("\n✨ No slash commands needed - just describe what you need!")
 
     def _print_status(self) -> None:
         """Print system status."""
@@ -420,172 +364,3 @@ class ChatInterface:
             print(f"  Temperature: {self.chatbot.temperature}")
             print(f"  Knowledge base: {self.chatbot.get_materials_count()} chunks")
             print(f"  {self.chatbot.get_conversation_summary()}")
-
-    def _handle_finish_session(self) -> None:
-        """Analyze the session and display recommendations."""
-        num_messages = len(self.chatbot.memory.messages)
-
-        if num_messages < 2:
-            print("\n⚠️  Not enough conversation to analyze.")
-            print("   Have at least one exchange before finishing the session.")
-            return
-
-        print("\n🔍 Analyzing your study session...")
-
-        # Ask for optional session topic
-        session_topic = input("What topic did you study? (optional, press Enter to skip): ").strip()
-        if not session_topic:
-            session_topic = None
-
-        # Analyze the session
-        recommendations = self.chatbot.analyze_session(session_topic=session_topic)
-
-        # Display results
-        self._display_session_analysis(recommendations)
-
-    def _display_session_analysis(self, recommendations: SessionRecommendations) -> None:
-        """Display session analysis results in a user-friendly format."""
-        print("\n" + "=" * 70)
-        print("📊 Session Analysis Report")
-        print("=" * 70)
-
-        # Session summary
-        print(f"\n📝 {recommendations.session_summary}")
-
-        # Weak points
-        if recommendations.weak_points:
-            print(f"\n🎯 Areas for Improvement ({len(recommendations.weak_points)} identified):")
-            print("-" * 70)
-
-            for idx, wp in enumerate(recommendations.weak_points, 1):
-                # Difficulty indicator
-                if wp.difficulty_level == "severe":
-                    icon = "🔴"
-                elif wp.difficulty_level == "moderate":
-                    icon = "🟡"
-                else:
-                    icon = "🟢"
-
-                print(f"\n{idx}. {icon} {wp.topic.upper()} - {wp.difficulty_level.capitalize()} difficulty")
-                print(f"   Frequency: {wp.frequency} mentions")
-                if wp.confusion_indicators > 0:
-                    print(f"   Confusion signals detected: {wp.confusion_indicators}")
-
-                # Show evidence
-                if wp.evidence:
-                    print(f"   Example: \"{wp.evidence[0][:80]}...\"" if len(wp.evidence[0]) > 80 else f"   Example: \"{wp.evidence[0]}\"")
-
-        else:
-            print("\n✅ Great session! No significant difficulties detected.")
-
-        # Priority topics
-        if recommendations.priority_topics:
-            print(f"\n🎯 Priority Topics for Next Session:")
-            for idx, topic in enumerate(recommendations.priority_topics[:3], 1):
-                print(f"   {idx}. {topic}")
-
-        # Suggested focus time
-        if recommendations.suggested_focus_time:
-            print(f"\n⏱️  Suggested Study Time:")
-            for topic, minutes in list(recommendations.suggested_focus_time.items())[:3]:
-                print(f"   • {topic}: {minutes} minutes")
-
-        # Study tips
-        if recommendations.study_approach_tips:
-            print(f"\n💡 Study Recommendations:")
-            for idx, tip in enumerate(recommendations.study_approach_tips, 1):
-                print(f"   {idx}. {tip}")
-
-        print("\n" + "=" * 70)
-        print("Keep up the great work! 🚀")
-        print("=" * 70 + "\n")
-
-    def _handle_schedule_creation(self) -> None:
-        """Create tomorrow's study schedule based on session analysis."""
-        from agents.scheduler_agent import SchedulerAgent
-        from core.mcp_connectors import CalendarConnector
-
-        # Check if we have recommendations from /finish
-        if self.chatbot.last_recommendations is None:
-            print("\n⚠️  No session analysis available.")
-            print("   Run /finish first to analyze your study session, then use /schedule.")
-            return
-
-        print("\n📅 Creating Tomorrow's Study Schedule")
-        print("=" * 70)
-
-        # Ask for availability
-        print("\nWhen are you available to study tomorrow?")
-        start_time = input("Start time (HH:MM, 24-hour format): ").strip()
-        end_time = input("End time (HH:MM, 24-hour format): ").strip()
-
-        if not start_time or not end_time:
-            print("❌ Both start and end times are required.")
-            return
-
-        # Build context for scheduler
-        context = {
-            "user_input": f"I'm available from {start_time} to {end_time}. "
-            f"Topics: {', '.join(self.chatbot.last_recommendations.priority_topics[:5])}"
-        }
-
-        try:
-            # Create scheduler with calendar connector
-            calendar_connector = CalendarConnector()
-            scheduler = SchedulerAgent(calendar_connector=calendar_connector)
-            schedule = scheduler.generate_schedule(
-                context=context, recommendations=self.chatbot.last_recommendations
-            )
-
-            # Display the schedule
-            self._display_schedule(schedule)
-
-            # Ask if user wants to sync to calendar
-            sync_choice = input("\n📆 Sync this schedule to your calendar? (yes/no): ").strip().lower()
-            if sync_choice in ["yes", "y"]:
-                try:
-                    scheduler.sync_schedule(schedule)
-                    print("✅ Schedule synced to calendar!")
-                except Exception as e:
-                    print(f"⚠️  Could not sync to calendar: {e}")
-                    print("   (Calendar integration may not be configured)")
-
-        except ValueError as e:
-            print(f"\n❌ Error creating schedule: {e}")
-        except Exception as e:
-            print(f"\n❌ Unexpected error: {e}")
-
-    def _display_schedule(self, schedule: dict) -> None:
-        """Display the generated study schedule."""
-        print("\n" + "=" * 70)
-        print("📋 Tomorrow's Study Schedule")
-        print("=" * 70)
-
-        preferences = schedule.get("preferences", {})
-        sessions = schedule.get("sessions", [])
-        based_on_weak_points = schedule.get("based_on_weak_points", False)
-
-        # Show if schedule is based on weak points
-        if based_on_weak_points:
-            print("\n✨ This schedule prioritizes your weak points!")
-            if preferences.get("severe_topics"):
-                print(f"   🔴 High priority: {', '.join(preferences['severe_topics'])}")
-            if preferences.get("moderate_topics"):
-                print(f"   🟡 Medium priority: {', '.join(preferences['moderate_topics'])}")
-
-        # Display sessions
-        print(f"\n📚 Study Sessions ({len([s for s in sessions if s['type'] == 'study'])} Pomodoro blocks):")
-        print("-" * 70)
-
-        for idx, session in enumerate(sessions, 1):
-            if session["type"] == "study":
-                subject = session["subject"]
-                start = session["start"]
-                end = session["end"]
-                print(f"{idx:2}. 📖 {start} - {end}  |  {subject}")
-            else:
-                start = session["start"]
-                end = session["end"]
-                print(f"    ☕ {start} - {end}  |  Break")
-
-        print("=" * 70)

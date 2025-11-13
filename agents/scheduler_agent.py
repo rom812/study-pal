@@ -90,30 +90,10 @@ class SchedulerAgent:
 
     def _dict_to_recommendations(self, data: dict) -> "SessionRecommendations":
         """Convert a dict (from LangGraph state) to SessionRecommendations object."""
-        from core.weakness_analyzer import SessionRecommendations, WeakPoint
+        from core.weakness_analyzer import SessionRecommendations
 
-        # Extract weak points from dict
-        weak_points_data = data.get("weak_points", [])
-        weak_points = []
-
-        for wp_data in weak_points_data:
-            weak_point = WeakPoint(
-                topic=wp_data.get("topic", "unknown"),
-                difficulty_level=wp_data.get("difficulty_level", "mild"),
-                evidence=wp_data.get("evidence", []),
-                frequency=wp_data.get("frequency", 1),
-                confusion_indicators=wp_data.get("confusion_indicators", 0),
-            )
-            weak_points.append(weak_point)
-
-        # Build SessionRecommendations
-        return SessionRecommendations(
-            weak_points=weak_points,
-            priority_topics=[wp.topic for wp in weak_points[:5]],
-            suggested_focus_time={wp.topic: 15 for wp in weak_points},
-            study_approach_tips=data.get("study_approach_tips", []),
-            session_summary=data.get("session_summary", "Session analyzed"),
-        )
+        # Use the from_dict class method for conversion
+        return SessionRecommendations.from_dict(data)
 
     def sync_schedule(self, schedule: dict) -> None:
         """Persist the latest schedule by creating calendar events."""

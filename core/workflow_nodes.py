@@ -80,7 +80,7 @@ def intent_router_node(state: StudyPalState) -> dict:
     elif any(word in user_text for word in ["analyze", "session", "weak points", "finish", "review"]):
         intent = "analyze"
         next_node = "analyzer"
-    elif any(word in user_text for word in ["motivate", "encourage", "inspiration"]):
+    elif any(word in user_text for word in ["motivat", "encourage", "inspiration"]):
         intent = "motivate"
         next_node = "motivator"
     else:
@@ -234,10 +234,17 @@ Please respond based on the context and conversation history above."""
     # Update the current topic if we can extract it
     # (For now, we'll keep it simple)
 
+    # === NEW: Multi-turn tutoring support ===
+    # Mark tutoring session as active (enables Tutor → Tutor loops)
+    # The route_after_tutor function will decide if we continue or exit
+    # based on user intent detection
+
     # Return state updates
     return {
         "messages": [AIMessage(content=answer)],
-        "next_agent": "end"  # We're done for now
+        "tutor_session_active": True,  # Enables multi-turn tutoring
+        "session_mode": "active_tutoring",  # Tracks workflow state
+        "next_agent": "tutor"  # Will be overridden by route_after_tutor conditional
     }
 
 
@@ -315,15 +322,26 @@ def scheduler_agent_node(state: StudyPalState) -> dict:
     }
 
     try:
+        # === NEW: Use analysis results from Analyzer → Scheduler handoff ===
+        # If analysis_results exist in state, use them for prioritization
+        analysis_results = state.get("analysis_results")
+        weak_points = state.get("weak_points")
+
         # Generate schedule, use weak points if available
         schedule = scheduler.generate_schedule(
             context=context,
-            recommendations=state.get("weak_points")
+            recommendations=weak_points or analysis_results
         )
 
         # Format nice response
         sessions = schedule.get("sessions", [])
         response = f"📚 I've created your study schedule!\n\n"
+
+        # === NEW: Reference analysis in scheduling response ===
+        if analysis_results and hasattr(analysis_results, 'weak_points') and analysis_results.weak_points:
+            weak_topics = [wp.topic for wp in analysis_results.weak_points[:3]]
+            response += f"📊 Based on your session analysis, I've prioritized: {', '.join(weak_topics)}\n\n"
+
         response += f"Found {len([s for s in sessions if s['type'] == 'study'])} study sessions:\n\n"
 
         for idx, session in enumerate(sessions[:5], 1):  # Show first 5
@@ -337,6 +355,7 @@ def scheduler_agent_node(state: StudyPalState) -> dict:
         return {
             "messages": [AIMessage(content=response)],
             "generated_schedule": schedule,
+            "session_mode": "scheduling_requested",
             "next_agent": "end"
         }
 
@@ -387,16 +406,16 @@ def analyzer_agent_node(state: StudyPalState) -> dict:
             session_topic=state.get("current_topic")
         )
 
-        # Format the response
-        weak_points = result.get("weak_points", [])
+        # result is a SessionRecommendations dataclass object
+        weak_points = result.weak_points
 
         if weak_points:
             response = f"📊 Session Analysis:\n\n"
             response += f"I identified {len(weak_points)} areas to focus on:\n\n"
 
             for idx, wp in enumerate(weak_points[:3], 1):
-                topic = wp.get("topic", "Unknown")
-                difficulty = wp.get("difficulty_level", "mild")
+                topic = wp.topic
+                difficulty = wp.difficulty_level
                 icon = "🔴" if difficulty == "severe" else "🟡" if difficulty == "moderate" else "🟢"
 
                 response += f"{idx}. {icon} {topic.upper()} - {difficulty} difficulty\n"
@@ -407,10 +426,32 @@ def analyzer_agent_node(state: StudyPalState) -> dict:
 
         logger.info(f"   ✓ Found {len(weak_points)} weak points")
 
+        # === NEW: Detect scheduling intent for Analyzer → Scheduler handoff ===
+        # Check if user explicitly requested scheduling in the conversation
+        user_wants_scheduling = False
+
+        # Look at last few user messages for scheduling keywords
+        for msg in reversed(state["messages"][-5:]):
+            if isinstance(msg, HumanMessage):
+                user_text = msg.content.lower()
+                scheduling_keywords = [
+                    "schedule", "plan", "calendar", "study plan",
+                    "when should i", "help me plan", "create a schedule"
+                ]
+
+                if any(keyword in user_text for keyword in scheduling_keywords):
+                    user_wants_scheduling = True
+                    logger.info(f"   🗓️  Detected scheduling request in: '{msg.content}'")
+                    break
+
         return {
             "messages": [AIMessage(content=response)],
             "weak_points": result,
-            "next_agent": "end"
+            "analysis_results": result,  # Store for scheduler to use
+            "user_wants_scheduling": user_wants_scheduling,  # Flag for conditional routing
+            "session_mode": "analysis_requested",
+            "tutor_session_active": False,  # Tutoring session has ended
+            "next_agent": "scheduler" if user_wants_scheduling else "end"
         }
 
     except Exception as e:
@@ -440,27 +481,25 @@ def motivator_agent_node(state: StudyPalState) -> dict:
     logger.info("💪 Motivator Agent: Crafting motivation...")
 
     from agents.motivator_agent import MotivatorAgent, OpenAIMotivationModel
-    from agents.quote_store import QuoteStore
+    from agents.user_profile import UserProfileStore
     from pathlib import Path
 
     try:
-        # Load quote store
-        quote_store = QuoteStore(Path("data/quotes_store.json"))
+        # Load user profile store
+        profile_store = UserProfileStore(Path("data/profiles"))
 
         # Create motivator
         motivator = MotivatorAgent(
-            fetcher=None,
-            quote_store=quote_store,
+            profile_store=profile_store,
             llm=OpenAIMotivationModel()
         )
 
         # Generate motivation
-        motivation = motivator.craft_message(
-            user_id=state["user_id"],
-            persona="Steve Jobs"  # Could get from user profile
+        motivation = motivator.craft_personalized_message(
+            user_id=state["user_id"]
         )
 
-        response = f"💪 {motivation.text}\n\n— Steve Jobs"
+        response = f"{motivation.text}"
         logger.info("   ✓ Generated motivational message")
 
         return {
@@ -477,3 +516,193 @@ def motivator_agent_node(state: StudyPalState) -> dict:
             "messages": [AIMessage(content=response)],
             "next_agent": "end"
         }
+
+
+# =============================================================================
+# NEW: Conditional Routing Functions for Multi-Agent Orchestration
+# =============================================================================
+
+def detect_tutor_exit_intent(messages: list) -> bool:
+    """
+    Use LLM to detect if the user wants to end the tutoring session.
+
+    This function analyzes the conversation to determine if the user is signaling
+    they want to finish tutoring and move to analysis/scheduling.
+
+    Exit signals include:
+    - "I'm done", "that's all", "finish", "end session"
+    - "I understand now", "got it, thanks"
+    - "Can you analyze my session?"
+    - Implicit completion: "thank you, bye"
+
+    Args:
+        messages: List of conversation messages
+
+    Returns:
+        bool: True if user wants to exit tutoring, False if they want to continue
+
+    Example:
+        >>> detect_tutor_exit_intent([
+        ...     HumanMessage("What is calculus?"),
+        ...     AIMessage("Calculus is..."),
+        ...     HumanMessage("Thanks, I'm done for now")
+        ... ])
+        True
+    """
+    if len(messages) < 2:
+        # Need at least 1 exchange to detect exit intent
+        return False
+
+    # Get last 4 messages (2 exchanges) for context
+    recent_messages = messages[-4:]
+    last_user_message = None
+
+    # Find the last user message
+    for msg in reversed(recent_messages):
+        if isinstance(msg, HumanMessage):
+            last_user_message = msg.content
+            break
+
+    if not last_user_message:
+        return False
+
+    # Quick keyword check for obvious exit signals (avoid LLM call if possible)
+    exit_keywords = [
+        "done", "finish", "end", "stop", "enough", "that's all",
+        "analyze", "session summary", "weak points", "schedule",
+        "bye", "goodbye", "see you", "thanks for your help"
+    ]
+
+    user_text_lower = last_user_message.lower()
+    has_exit_keyword = any(keyword in user_text_lower for keyword in exit_keywords)
+
+    if has_exit_keyword:
+        # Use LLM for nuanced detection to avoid false positives
+        # (e.g., "I'm done with this problem" vs "I'm done for today")
+        try:
+            llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
+
+            detection_prompt = f"""You are analyzing a tutoring conversation to detect if the user wants to END the tutoring session.
+
+Recent conversation:
+{chr(10).join([f"{msg.__class__.__name__}: {msg.content}" for msg in recent_messages])}
+
+Analyze the LAST user message: "{last_user_message}"
+
+Does the user want to:
+A) END the tutoring session and move on (analyze their session, schedule, or just finish)
+B) CONTINUE with more questions or the current topic
+
+Reply with ONLY one word: "END" or "CONTINUE"
+
+Examples of END signals:
+- "I'm done for today, can you analyze my weak points?"
+- "Thanks, that's all I needed"
+- "Okay I understand now, let's finish up"
+- "Great! Can you create a schedule for me?"
+
+Examples of CONTINUE signals:
+- "I'm done with this problem, can you give me another one?"
+- "That's all for calculus, can you help me with physics?"
+- "Okay, what about derivatives?"
+"""
+
+            response = llm.invoke([SystemMessage(content=detection_prompt)])
+            decision = response.content.strip().upper()
+
+            logger.info(f"🔍 Exit intent detection: '{last_user_message}' → {decision}")
+
+            return decision == "END"
+
+        except Exception as e:
+            logger.warning(f"⚠️  Exit intent detection failed, defaulting to CONTINUE: {e}")
+            # Default to continue on error (safer to keep user in tutoring)
+            return False
+
+    # No exit keywords detected
+    return False
+
+
+def route_after_tutor(state: StudyPalState) -> str:
+    """
+    Conditional routing after tutor agent completes.
+
+    Decides where to go next after a tutoring interaction:
+    - To "analyzer" if user wants to end session (Tutor → Analyzer)
+    - To END otherwise (wait for next user message)
+
+    NOTE: We DON'T loop back to tutor here! The tutor loop happens naturally:
+    1. User asks question → Intent Router → Tutor → END
+    2. User asks another question → Intent Router → Tutor → END
+    3. User says "I'm done" → Intent Router detects "finish" → Analyzer
+
+    Args:
+        state: Current workflow state
+
+    Returns:
+        str: Next node name ("analyzer" or "__end__")
+
+    Flow Logic:
+        1. Check if workflow_complete flag is set → END
+        2. Detect exit intent from messages → "analyzer"
+        3. Otherwise → END (wait for next user message)
+    """
+    logger.info("🔀 Routing after Tutor...")
+
+    # Check if workflow is explicitly marked complete
+    if state.get("workflow_complete", False):
+        logger.info("   → END (workflow_complete=True)")
+        return "__end__"
+
+    # Detect if user wants to exit tutoring session
+    wants_to_exit = detect_tutor_exit_intent(state["messages"])
+
+    if wants_to_exit:
+        logger.info("   → ANALYZER (user wants to end session)")
+        return "analyzer"
+    else:
+        logger.info("   → END (waiting for next user message)")
+        return "__end__"
+
+
+def route_after_analyzer(state: StudyPalState) -> str:
+    """
+    Conditional routing after analyzer agent completes.
+
+    Decides where to go after analysis:
+    - To "scheduler" if user wants scheduling (Analyzer → Scheduler)
+    - To END if no scheduling requested
+
+    This enables automatic handoff from analysis to scheduling when appropriate.
+
+    Args:
+        state: Current workflow state
+
+    Returns:
+        str: Next node name ("scheduler" or "__end__")
+
+    Flow Logic:
+        1. Check user_wants_scheduling flag → "scheduler"
+        2. Check for scheduling keywords in last message → "scheduler"
+        3. Otherwise → END
+    """
+    logger.info("🔀 Routing after Analyzer...")
+
+    # Check explicit scheduling flag
+    if state.get("user_wants_scheduling", False):
+        logger.info("   → SCHEDULER (user_wants_scheduling=True)")
+        return "scheduler"
+
+    # Check last message for scheduling intent
+    if state["messages"]:
+        last_message = state["messages"][-1]
+        if isinstance(last_message, HumanMessage):
+            user_text = last_message.content.lower()
+            scheduling_keywords = ["schedule", "plan", "calendar", "study plan", "when should i"]
+
+            if any(keyword in user_text for keyword in scheduling_keywords):
+                logger.info(f"   → SCHEDULER (detected scheduling keywords in: '{user_text}')")
+                return "scheduler"
+
+    logger.info("   → END (no scheduling requested)")
+    return "__end__"

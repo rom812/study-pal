@@ -12,6 +12,7 @@ All powered by LangGraph multi-agent system!
 """
 
 import os
+import logging
 from pathlib import Path
 import gradio as gr
 from dotenv import load_dotenv
@@ -23,6 +24,18 @@ from core.weakness_analyzer import SessionRecommendations
 
 # Load environment variables
 load_dotenv()
+
+# Configure logging
+Path("logs").mkdir(exist_ok=True)
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('logs/gradio_app.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
 # Global chatbot instance (will be initialized per session)
 chatbot_instances = {}
@@ -358,12 +371,12 @@ def analyze_study_session(session_topic: str = "", user_id: str = "default_user"
         if len(chatbot.conversation_state.get("messages", [])) < 2:
             return "⚠️ Not enough conversation to analyze. Have a study session first!"
 
-        # Analyze session
-        topic = session_topic.strip() if session_topic.strip() else None
-        recommendations = chatbot.analyze_session(session_topic=topic)
+        # Use natural language to trigger analyzer agent via LangGraph
+        topic_suffix = f" for {session_topic.strip()}" if session_topic.strip() else ""
+        analysis_request = f"Analyze my study session{topic_suffix} and identify my weak points"
+        response = chatbot.chat(analysis_request)
 
-        # Format the analysis
-        return format_session_analysis(recommendations)
+        return f"### 📊 Session Analysis\n\n{response}"
     except Exception as e:
         return f"❌ Error analyzing session: {str(e)}"
 
@@ -436,21 +449,19 @@ def create_schedule(start_time: str, end_time: str, user_id: str = "default_user
     try:
         chatbot = get_or_create_chatbot(user_id)
 
-        # Check if we have recommendations
-        if chatbot.last_recommendations is None:
-            return "⚠️ Please analyze your study session first before creating a schedule."
-
         if not start_time or not end_time:
             return "❌ Please provide both start and end times (HH:MM format, e.g., 14:00)."
 
-        # Create context for scheduler
-        topics = chatbot.last_recommendations.priority_topics[:5] if chatbot.last_recommendations.priority_topics else ["General Study"]
+        # Check if we have weak points from previous analysis
+        weak_points = chatbot.get_weak_points()
 
-        if not topics:
-            topics = ["General Study"]
+        # Build schedule request using natural language (LangGraph will route to scheduler agent)
+        if weak_points and weak_points.get("priority_topics"):
+            topics = ", ".join(weak_points["priority_topics"][:5])
+            schedule_request = f"Create a study schedule for tomorrow from {start_time} to {end_time} focusing on these topics: {topics}"
+        else:
+            schedule_request = f"Create a study schedule for tomorrow from {start_time} to {end_time}"
 
-        # Use the scheduler via chat (LangGraph will route to scheduler agent)
-        schedule_request = f"Create a study schedule for tomorrow from {start_time} to {end_time} focusing on: {', '.join(topics)}"
         response = chatbot.chat(schedule_request)
 
         return f"### 📅 Study Schedule\n\n{response}"

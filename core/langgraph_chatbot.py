@@ -74,9 +74,6 @@ class LangGraphChatbot:
         from langchain_community.chat_message_histories import ChatMessageHistory
         self.memory = ChatMessageHistory()
 
-        # For session analysis
-        self.last_recommendations = None
-
         logger.info("[LangGraph Chatbot] Ready! All agents standing by.")
 
     def chat(self, user_message: str) -> str:
@@ -205,57 +202,3 @@ class LangGraphChatbot:
     def get_schedule(self) -> dict:
         """Get the last generated schedule."""
         return self.conversation_state.get("generated_schedule")
-
-    def analyze_session(self, session_topic: str = None):
-        """
-        Analyze the current tutoring session to identify weak points.
-
-        Args:
-            session_topic: Optional topic that was studied
-
-        Returns:
-            SessionRecommendations with weak points and study suggestions
-        """
-        from agents.weakness_detector_agent import WeaknessDetectorAgent
-        from core.weakness_analyzer import SessionRecommendations, WeakPoint, RecommendationBuilder
-
-        # Use the weakness detector agent for LLM-based analysis
-        detector = WeaknessDetectorAgent(model="gpt-4o-mini")
-        result = detector.analyze_conversation(
-            self.conversation_state["messages"],
-            session_topic=session_topic
-        )
-
-        # Convert LLM result to WeakPoint objects
-        weak_points = []
-        for wp_data in result.get("weak_points", []):
-            weak_point = WeakPoint(
-                topic=wp_data.get("topic", "unknown"),
-                difficulty_level=wp_data.get("difficulty_level", "mild"),
-                evidence=wp_data.get("evidence", []),
-                frequency=1,
-                confusion_indicators=len(wp_data.get("evidence", [])),
-            )
-            weak_points.append(weak_point)
-
-        # Build recommendations from weak points
-        priority_topics = [wp.topic for wp in weak_points[:5]]
-        suggested_focus_time = RecommendationBuilder.calculate_focus_time(weak_points)
-        study_tips = RecommendationBuilder.generate_study_tips(weak_points)
-        summary = result.get("session_summary", "Session analyzed")
-
-        recommendations = SessionRecommendations(
-            weak_points=weak_points,
-            priority_topics=priority_topics,
-            suggested_focus_time=suggested_focus_time,
-            study_approach_tips=study_tips,
-            session_summary=summary,
-        )
-
-        # Save recommendations for scheduler integration
-        self.last_recommendations = recommendations
-
-        # Also update conversation state
-        self.conversation_state["weak_points"] = result
-
-        return recommendations

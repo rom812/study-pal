@@ -8,6 +8,8 @@ from typing import Literal
 
 from langchain_core.messages import BaseMessage, HumanMessage
 
+from core.weakness_analyzer import SessionRecommendations, WeakPoint
+
 try:
     from openai import OpenAI
 except ImportError:
@@ -49,27 +51,21 @@ class WeaknessDetectorAgent:
 
     def analyze_conversation(
         self, messages: list[BaseMessage], session_topic: str | None = None
-    ) -> dict:
+    ) -> SessionRecommendations:
         """
-        Analyze conversation to identify weak points using LLM.
+        Analyze conversation to identify weak points and generate recommendations using LLM.
 
         Args:
             messages: List of conversation messages
             session_topic: Optional general topic of the session
 
         Returns:
-            Dictionary with detected weak points:
-            {
-                "weak_points": [
-                    {
-                        "topic": str,
-                        "difficulty_level": "mild" | "moderate" | "severe",
-                        "evidence": [str],
-                        "reasoning": str
-                    }
-                ],
-                "session_summary": str
-            }
+            SessionRecommendations object with:
+            - weak_points: List of WeakPoint objects
+            - priority_topics: Topics ordered by severity
+            - suggested_focus_time: Dict of topic -> minutes
+            - study_approach_tips: List of personalized tips
+            - session_summary: Overall session assessment
         """
         # Build conversation transcript
         transcript = self._build_transcript(messages)
@@ -95,11 +91,51 @@ class WeaknessDetectorAgent:
                 raise ValueError("Empty response from LLM")
 
             result = json.loads(result_text)
-            return result
+
+            # Convert to SessionRecommendations object
+            return self._convert_to_recommendations(result)
 
         except Exception as e:
             print(f"[llm_detector] Error during LLM analysis: {e}")
-            return {"weak_points": [], "session_summary": "Analysis failed"}
+            # Return empty recommendations on error
+            return SessionRecommendations(
+                weak_points=[],
+                priority_topics=[],
+                suggested_focus_time={},
+                study_approach_tips=["Analysis failed. Please try again."],
+                session_summary="Analysis failed"
+            )
+
+    def _convert_to_recommendations(self, result: dict) -> SessionRecommendations:
+        """
+        Convert LLM JSON result to SessionRecommendations object.
+
+        Args:
+            result: Dict with LLM analysis results
+
+        Returns:
+            SessionRecommendations object
+        """
+        # Convert weak_points dicts to WeakPoint objects
+        weak_points = []
+        for wp_data in result.get("weak_points", []):
+            weak_point = WeakPoint(
+                topic=wp_data.get("topic", "unknown"),
+                difficulty_level=wp_data.get("difficulty_level", "mild"),
+                evidence=wp_data.get("evidence", []),
+                frequency=wp_data.get("frequency", 1),
+                confusion_indicators=wp_data.get("confusion_indicators", 0),
+            )
+            weak_points.append(weak_point)
+
+        # Build SessionRecommendations
+        return SessionRecommendations(
+            weak_points=weak_points,
+            priority_topics=result.get("priority_topics", []),
+            suggested_focus_time=result.get("suggested_focus_time", {}),
+            study_approach_tips=result.get("study_approach_tips", []),
+            session_summary=result.get("session_summary", "No summary available"),
+        )
 
     def _build_transcript(self, messages: list[BaseMessage]) -> str:
         """Build a readable transcript from messages."""
@@ -135,7 +171,7 @@ class WeaknessDetectorAgent:
         """
         return """You are an expert educational psychologist analyzing student-tutor conversations to identify learning difficulties.
 
-Your task: Identify topics where the student genuinely struggled, not just asked questions.
+Your task: Identify topics where the student genuinely struggled, generate personalized study recommendations, and provide actionable advice.
 
 # Key Indicators of Struggle:
 
@@ -213,8 +249,19 @@ Analysis:
       "topic": "specific topic name (not 'again' or 'simpler')",
       "difficulty_level": "mild" | "moderate" | "severe",
       "evidence": ["direct quote 1", "direct quote 2"],
-      "reasoning": "brief explanation of why this is a weak point"
+      "frequency": <number of times topic appeared>,
+      "confusion_indicators": <number of confusion signals detected>
     }
+  ],
+  "priority_topics": ["topic1", "topic2", ...],  // Ordered by severity (severe first)
+  "suggested_focus_time": {
+    "topic1": <minutes>,
+    "topic2": <minutes>
+  },
+  "study_approach_tips": [
+    "Actionable tip 1",
+    "Actionable tip 2",
+    ...
   ],
   "session_summary": "1-2 sentence summary of overall session performance"
 }
@@ -223,6 +270,23 @@ Analysis:
 - **mild**: Asked 1-2 times, minor confusion
 - **moderate**: Asked 3+ times, explicit confusion, requested simpler explanations
 - **severe**: 5+ mentions, conceptual confusion, mixing concepts, high frustration
+
+# Focus Time Calculation (suggested study minutes):
+- **severe**: 30-50 minutes base (add 5 min per extra occurrence, max +20)
+- **moderate**: 20-30 minutes base (add 3-5 min per extra occurrence, max +15)
+- **mild**: 10-15 minutes base (add 2-3 min per extra occurrence, max +10)
+
+# Study Approach Tips Guidelines:
+Generate 3-5 contextual tips based on patterns you observe:
+- If severe topics exist: "Focus on [count] challenging topic(s). Break them into smaller parts and practice with examples."
+- If moderate topics exist: "Review [count] topic(s) that need reinforcement. Try explaining them in your own words."
+- If high confusion (3+ signals): "Concepts like '[topic]' may benefit from visual aids, diagrams, or alternative explanations."
+- If many topics (>3): "Don't try to tackle everything at once. Prioritize the hardest topics first."
+- If few topics (≤3): "Use spaced repetition: review these topics over multiple short sessions."
+- Always include: "Consider working through practice problems to solidify understanding."
+- If no weak points: "Great session! Continue building on what you learned."
+
+Make tips specific to the actual topics and struggles observed in the conversation.
 
 Now analyze the conversation and respond with JSON only."""
 
