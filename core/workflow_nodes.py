@@ -11,7 +11,7 @@ Each worker (node) does their job and passes the work to the next worker.
 """
 
 import logging
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
 from core.workflow_state import StudyPalState
@@ -218,7 +218,7 @@ Student's current message: {question}
 Please respond based on the context and conversation history above."""
 
         messages = [
-            HumanMessage(content=system_message),
+            SystemMessage(content=system_message),
             HumanMessage(content=user_message)
         ]
 

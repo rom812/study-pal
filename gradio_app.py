@@ -282,8 +282,8 @@ def upload_file(file, user_id: str = "default_user"):
     try:
         chatbot = get_or_create_chatbot(user_id)
 
-        # Get the file path from the upload
-        file_path = Path(file.name)
+        # Get the file path from the upload (filepath type returns string directly)
+        file_path = Path(file)
 
         # Ingest the material
         result = chatbot.ingest_material(file_path)

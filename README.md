@@ -1,116 +1,248 @@
-# Study Pal – Intelligent Multi-Agent Study Assistant
+# Study Pal – LangGraph-Powered Multi-Agent Study Assistant
 
-Study Pal is a modular, multi-agent system that combines smart scheduling, adaptive tutoring, and persona-driven motivation to elevate the studying experience. You define the architecture; Codex assists with implementation details and automation while keeping everything aligned with your vision.
+Study Pal is a production-grade multi-agent system that orchestrates four specialized AI agents through LangGraph to deliver an intelligent, personalized studying experience. Built with LangChain, ChromaDB, and Gradio, it demonstrates modern AI architecture patterns including RAG, multi-agent workflows, and external service integration via Model Context Protocol (MCP).
 
-## High-Level Goals
-- Coordinate independent agents through LangGraph (or Airflow) to deliver a cohesive study companion.
-- Integrate with real-world services via Model Context Protocol (MCP) connectors such as Google Calendar and Gmail.
-- Guarantee reliable outputs using Pydantic validation and comprehensive automated tests.
-- Deliver a RAG-powered tutor that adapts to learner performance over time.
+## Key Features
 
-## Core Agents
-### Scheduler Agent – Smart Time Manager
-- Builds and updates study schedules based on productivity signals.
-- Uses MCP integrations (Google Calendar, Gmail) to manage events and reminders.
-- Collaborates with the Tutor Agent to allocate sessions and rebalance workloads.
-- **QA:** pytest coverage for time conflicts, date parsing, and edge-case handling.
+- **LangGraph-Orchestrated Multi-Agent System**: Conditional routing between 4 specialized agents based on intent detection
+- **RAG-Powered Tutoring**: Per-user vector stores ensure answers come strictly from uploaded study materials
+- **Smart Scheduling**: Pomodoro-based study plans with optional Google Calendar integration (MCP)
+- **Adaptive Analysis**: Session-by-session weakness detection using LLM-based analysis
+- **Personalized Motivation**: Context-aware motivational messages with web-scraped quotes
+- **User Authentication**: Google OAuth-based login with per-user data isolation
+- **Comprehensive Testing**: 73+ test cases covering core components and agent logic
 
-### Motivator Agent – Personalized Inspiration
-- Generates motivational messages in the persona selected by the user.
-- Pulls real quotes, clips, or stories from external APIs (e.g., YouTube, Wikipedia, quote databases).
-- Syncs with the Scheduler to time motivational nudges.
-- **QA:** Pydantic schema enforcing `text`, `source`, and `persona_style` fields for every output.
+## Architecture
 
-### Tutor Agent – Adaptive Study Companion
-- Ingests PDFs, DOCX, or raw text and populates a vector store (ChromaDB or Pinecone).
-- Uses LangChain RAG to deliver quizzes, walkthroughs, and feedback loops.
-- Reports progress stats back to the Scheduler for dynamic adjustments.
-- **QA:** pytest for parsing, retrieval, question generation, and Pydantic models for structured responses.
+### LangGraph Workflow
 
-## System Architecture
 ```
-User ➜ Scheduler Agent ➜ User
-   └➜ Motivator Agent ➜ User
-   └➜ Tutor Agent ➜ Scheduler Agent ➜ User
+User Input → LangGraphChatbot → Intent Router Node
+                                       │
+                    ┌──────────────────┼──────────────────┐
+                    │                  │                  │
+              ┌─────▼─────┐     ┌─────▼─────┐     ┌─────▼─────┐     ┌──────────┐
+              │   Tutor   │     │ Scheduler │     │ Analyzer  │     │Motivator │
+              │   Agent   │     │   Agent   │     │   Agent   │     │  Agent   │
+              │  (RAG)    │     │(Pomodoro) │     │(Weakness) │     │ (Quotes) │
+              └───────────┘     └───────────┘     └───────────┘     └──────────┘
+                    │                  │                  │                │
+                    └──────────────────┴──────────────────┴────────────────┘
+                                       │
+                                 Response to User
 ```
-- **Graph Manager:** Orchestrates agent conversations using LangGraph (primary) with an option to port to Airflow if needed.
-- **RAG Pipeline:** Handles text preprocessing, embedding, storage, and retrieval for study materials.
-- **MCP Connectors:** Wrap external services (Calendar, Gmail, future APIs) behind a clean interface.
 
-## Suggested Project Structure
+**Implementation Files**:
+- `core/langgraph_chatbot.py` - Main chatbot orchestrator with LangGraph workflow
+- `core/workflow_graph.py` - LangGraph graph definition and node connections
+- `core/workflow_nodes.py` - Intent router and 4 agent node implementations
+- `core/workflow_state.py` - Shared state schema for inter-agent communication
+
+### Agent Implementations
+
+**1. Tutor Agent** ([agents/tutor_agent.py](agents/tutor_agent.py))
+- Ingests PDFs and creates per-user ChromaDB collections
+- Uses RAG (Retrieval-Augmented Generation) to answer questions strictly from uploaded materials
+- Conversation history management for contextual responses
+- Prevents hallucination through context-only system prompts
+
+**2. Scheduler Agent** ([agents/scheduler_agent.py](agents/scheduler_agent.py))
+- Generates Pomodoro-based study schedules with work/break intervals
+- Optional Google Calendar integration via MCP connectors
+- Structured output using Pydantic models for reliability
+
+**3. Analyzer Agent** ([agents/weakness_detector_agent.py](agents/weakness_detector_agent.py))
+- Detects learning weaknesses from study session interactions
+- Provides actionable recommendations for improvement
+- LLM-powered analysis with structured output
+
+**4. Motivator Agent** ([agents/motivator_agent.py](agents/motivator_agent.py))
+- Persona-based motivational messages (Socrates, Feynman, Yoda, etc.)
+- Web scraping integration for authentic quotes
+- Context-aware encouragement based on user progress
+
+### External Integrations
+
+**Model Context Protocol (MCP)** ([core/mcp_connectors.py](core/mcp_connectors.py)):
+- Google Calendar sync for study schedule management
+- Graceful degradation when services are unavailable
+- Extensible architecture for future integrations (Gmail, Notion, etc.)
+
+**RAG Pipeline** ([core/rag_pipeline.py](core/rag_pipeline.py)):
+- Document processing with sentence-transformers embeddings
+- Per-user ChromaDB collections for data isolation
+- Efficient retrieval with configurable chunk sizes
+
+### User Interface
+
+**Gradio Web App** ([gradio_app.py](gradio_app.py)):
+- Google OAuth authentication with secure session management
+- Interactive onboarding flow
+- Multi-tab interface: Chat, Upload, Analysis, Scheduling
+- Real-time material count and session tracking
+
+## Project Structure
+
 ```
-multi_agent_study_assistant/
-├── agents/
-│   ├── scheduler_agent.py
-│   ├── motivator_agent.py
-│   ├── tutor_agent.py
-│   └── __init__.py
-├── core/
-│   ├── rag_pipeline.py
-│   ├── mcp_connectors.py
-│   ├── graph_manager.py
-│   ├── utils.py
-│   └── __init__.py
-├── tests/
-│   ├── test_scheduler.py
-│   ├── test_motivator.py
-│   ├── test_tutor.py
-│   ├── test_rag_pipeline.py
-│   └── conftest.py
-├── data/
-│   ├── embeddings/
-│   ├── study_materials/
-│   └── logs/
+study_pal/
+├── agents/                      # Agent implementations
+│   ├── motivator_agent.py       # Motivational message generation
+│   ├── scheduler_agent.py       # Study schedule creation
+│   ├── tutor_agent.py          # RAG-powered tutoring
+│   ├── weakness_detector_agent.py # Session analysis
+│   └── quote_store.py          # Quote web scraping
+├── core/                        # Core infrastructure
+│   ├── langgraph_chatbot.py    # Main chatbot with LangGraph
+│   ├── workflow_graph.py        # LangGraph workflow definition
+│   ├── workflow_nodes.py        # Agent nodes and intent router
+│   ├── workflow_state.py        # Shared state schema
+│   ├── rag_pipeline.py         # RAG pipeline implementation
+│   ├── mcp_connectors.py       # MCP service connectors
+│   └── document_processor.py   # Document ingestion
+├── tests/                       # Comprehensive test suite
+│   ├── test_tutor.py           # 12 tutor tests
+│   ├── test_rag_pipeline.py    # 13 RAG tests
+│   ├── test_scheduler_agent.py # 7 scheduler tests
+│   ├── test_motivator_agent.py # 4 motivator tests
+│   ├── test_document_processor.py # 10 document tests
+│   ├── test_onboarding.py      # 20 onboarding tests
+│   └── conftest.py             # Shared fixtures
+├── data/                        # Data storage (gitignored)
+│   ├── chroma_db/              # Per-user vector stores
+│   ├── profiles/               # User profiles
+│   └── study_materials/        # Uploaded documents
 ├── configs/
-│   ├── settings.yaml
-│   └── credentials.json  # excluded from git
-├── main.py
-├── requirements.txt
-└── README.md
+│   └── settings.yaml           # Configuration management
+├── gradio_app.py               # Web UI entry point
+├── main.py                     # CLI entry point
+└── requirements.txt            # Python dependencies
 ```
 
-## Development Pipeline
-1. **Bootstrap Environment**
-   - Define `requirements.txt` with LangChain, LangGraph, Pydantic, pytest, ChromaDB, OAuth libraries, etc.
-   - Create Dockerfile and devcontainer for reproducible environments.
+## Technical Stack
 
-2. **Core Infrastructure**
-   - Implement `settings.yaml` and Pydantic config models for runtime configuration.
-   - Stand up `graph_manager.py` with a stubbed LangGraph workflow connecting the three agents.
-   - Build MCP connector abstractions with mocked Google services to enable early testing.
+- **LangChain**: Agent framework and LLM abstractions
+- **LangGraph**: Multi-agent workflow orchestration with conditional routing
+- **OpenAI GPT-4o-mini**: Primary LLM for all agents
+- **ChromaDB**: Vector database for RAG pipeline
+- **Gradio**: Web UI framework with OAuth support
+- **Pydantic**: Data validation and structured outputs
+- **pytest**: Test framework (73+ tests)
+- **sentence-transformers**: Document embeddings
 
-3. **Agent Implementations**
-   - Start with `scheduler_agent.py`: define interfaces, scheduling heuristics, and calendar sync logic.
-   - Add `motivator_agent.py`: persona prompt templates, API fetchers, and message formatting.
-   - Implement `tutor_agent.py`: document ingestion, embedding pipeline, and quiz generators.
+## Getting Started
 
-4. **RAG Pipeline & Data Layer**
-   - Implement `rag_pipeline.py` with document loaders, chunking strategy, embedding, and retrieval functions.
-   - Wire Tutor Agent to the RAG pipeline and vector store.
+### Prerequisites
 
-5. **Validation & QA**
-   - Create Pydantic models for each agent’s outputs.
-   - Flesh out pytest suites for unit and integration tests, including LangGraph workflow tests.
-   - Configure GitHub Actions CI for linting, tests, and type checks (mypy/ruff optional).
+```bash
+Python 3.10+
+OpenAI API key
+Google OAuth credentials (for login and calendar sync)
+```
 
-6. **Integrations & Observability**
-   - Finalize MCP connectors with real Google Calendar/Gmail integrations.
-   - Add logging, telemetry, and performance tracking under `data/logs/`.
-   - Prepare analytics hooks for future dashboards.
+### Installation
+
+```bash
+# Clone repository
+git clone <repo-url>
+cd study_pal
+
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Configure environment
+cp .env.example .env
+# Edit .env with your API keys and credentials
+```
+
+### Configuration
+
+Required environment variables:
+- `OPENAI_API_KEY` - OpenAI API access
+- `GOOGLE_CLIENT_ID` - Google OAuth client ID
+- `GOOGLE_CLIENT_SECRET` - Google OAuth secret
+- `GOOGLE_CALENDAR_MCP_ENDPOINT` (optional) - MCP server for calendar sync
+
+### Running
+
+```bash
+# Launch web interface
+python gradio_app.py
+
+# CLI interface
+python main.py
+```
+
+### Testing
+
+```bash
+# Run all tests
+pytest
+
+# Run with coverage
+pytest --cov=. --cov-report=html
+
+# Run specific test file
+pytest tests/test_rag_pipeline.py -v
+```
+
+## Development Status
+
+### Completed Features
+- ✅ Full LangGraph multi-agent orchestration
+- ✅ Intent-based routing between 4 agents
+- ✅ Per-user RAG pipeline with ChromaDB
+- ✅ Google OAuth authentication
+- ✅ Gradio web interface with 4 tabs
+- ✅ MCP connector framework
+- ✅ 73+ test cases covering core functionality
+- ✅ Pydantic validation for structured outputs
+
+### Known Limitations
+- LangGraph workflow tests not yet implemented (planned)
+- Intent routing is keyword-based (LLM-based routing planned)
+- Global state in Gradio app (refactoring for scalability planned)
+- Calendar sync requires MCP server setup (optional feature)
+
+## Demo Video Preparation
+
+This project is designed to showcase in technical interviews:
+
+**Key Talking Points**:
+1. **Modern Stack**: Demonstrates proficiency with cutting-edge LangChain/LangGraph ecosystem
+2. **Clean Architecture**: Clear separation of concerns (state, nodes, graph, agents)
+3. **Production Patterns**: Per-user isolation, graceful degradation, structured outputs
+4. **Testing Discipline**: Comprehensive test suite showing quality focus
+5. **External Integrations**: MCP connectors demonstrate API integration skills
+
+**Code Walkthrough Sequence**:
+1. [core/workflow_state.py](core/workflow_state.py) - Shared state definition
+2. [core/workflow_graph.py](core/workflow_graph.py) - LangGraph workflow
+3. [core/workflow_nodes.py](core/workflow_nodes.py) - Intent router logic
+4. [agents/tutor_agent.py](agents/tutor_agent.py) - RAG implementation
+5. [gradio_app.py](gradio_app.py) - UI and session management
 
 ## Future Enhancements
-- Daily Summary Agent for end-of-day recaps.
-- Analytics dashboard exposing productivity trends.
-- Voice mode and persona-based TTS.
-- Gamification mechanics (XP, achievements, streaks).
 
-## Working Agreement
-Codex acts as your implementation assistant: you provide architecture and review; Codex crafts the code, tests, and automation under your guidance. See `agents.md` for the partnership agreement.
+- [ ] Add LangGraph workflow integration tests
+- [ ] Migrate to LLM-based intent routing for better accuracy
+- [ ] Implement Redis-backed session management for horizontal scaling
+- [ ] Add daily summary agent for end-of-day recaps
+- [ ] Build analytics dashboard for productivity trends
+- [ ] Add voice mode with persona-based TTS
+- [ ] Implement gamification (XP, achievements, streaks)
 
-## Getting Started (Upcoming)
-- [ ] Populate `requirements.txt` and `Dockerfile`.
-- [ ] Scaffold the module layout under `agents/` and `core/`.
-- [ ] Add CI configuration and baseline tests.
-- [ ] Implement Scheduler Agent MVP.
+## Contributing
 
-Check items off as we progress. Let’s build Study Pal iteratively, validating each component through tests and Pydantic models.
+This is a portfolio project demonstrating AI engineering capabilities. Feedback and suggestions welcome via issues.
+
+## License
+
+MIT License - See LICENSE file for details
+
+---
+
+**Built with**: LangGraph for orchestration, LangChain for agents, ChromaDB for RAG, and Gradio for UI.

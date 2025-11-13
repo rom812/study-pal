@@ -9,6 +9,7 @@ __pycache__/
 build/
 dist/
 *.egg
+*\ 2.py
 
 # Virtual environments
 .env

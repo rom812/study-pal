@@ -6,30 +6,14 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from agents import MotivatorAgent, OpenAIMotivationModel, QuoteStore, SchedulerAgent, TutorAgent
+from agents import TutorAgent
 from agents.onboarding import create_onboarding_agent
 from agents.tutor_chatbot import ChatInterface, TutorChatbot
 from agents.user_profile import UserProfileStore
-from core.graph_manager import GraphManager
-from core.mcp_connectors import CalendarConnector
 from core.rag_pipeline import get_rag_pipeline
 
 
 load_dotenv(override=True)
-
-
-class DummyFetcher:
-    def fetch(self, persona: str) -> dict:
-        return {"text": f"Keep climbing, {persona}!", "source": "dummy"}
-
-
-def load_quote_store(path: Path) -> QuoteStore:
-    store = QuoteStore(path)
-    if not path.exists():
-        print(f"[quotes] No quote store found at {path}. Run `python -m scripts.load_quotes` to seed data.")
-    else:
-        print(f"[quotes] Loaded quote store from {path}.")
-    return store
 
 
 def demo_tutor_agent():
@@ -100,41 +84,6 @@ def demo_tutor_agent():
     print("\n" + "=" * 60)
     print("✅ DEMO COMPLETE - TutorAgent successfully demonstrated!")
     print("=" * 60 + "\n")
-
-
-def demo_full_system():
-    """Demonstrate the full Study Pal system with all agents."""
-    print("\n" + "=" * 60)
-    print("🚀 FULL SYSTEM DEMO - Study Pal Daily Cycle")
-    print("=" * 60 + "\n")
-
-    calendar_connector = CalendarConnector()
-    quote_store = load_quote_store(Path("data/quotes_store.json"))
-
-    # Initialize all agents (demo user)
-    rag_pipeline = get_rag_pipeline(user_id="demo_user")
-    scheduler = SchedulerAgent(calendar_connector=calendar_connector)
-    motivator = MotivatorAgent(
-        fetcher=DummyFetcher(),
-        quote_store=quote_store,
-        llm=OpenAIMotivationModel(),
-    )
-    tutor = TutorAgent(rag_pipeline=rag_pipeline)
-
-    manager = GraphManager(
-        scheduler=scheduler,
-        motivator=motivator,
-        tutor=tutor,
-    )
-
-    result = manager.run_daily_cycle(
-        {
-            "persona": "Steve Jobs",
-            "topic": "neural networks",
-            "user_input": "I am free 10-11pm tonight and want to focus on neural networks then review notes.",
-        }
-    )
-    print(result)
 
 
 def run_onboarding(user_id: str = "default_user"):
@@ -244,22 +193,18 @@ if __name__ == "__main__":
             start_chatbot(user_id)
         elif command == "--tutor-demo":
             demo_tutor_agent()
-        elif command == "--full":
-            demo_full_system()
         else:
             print(f"❌ Unknown command: {command}")
             print("\n📖 Study Pal - Available commands:")
             print("   python main.py --onboard [user_id]   # Create/update user profile")
             print("   python main.py --chat [user_id]      # Start interactive chatbot")
             print("   python main.py --tutor-demo          # Demo TutorAgent with RAG")
-            print("   python main.py --full                # Demo full system with all agents")
             print("\n   [user_id] is optional and defaults to 'default_user'")
     else:
         print("\n📖 Study Pal - Available commands:")
         print("   python main.py --onboard [user_id]   # Create/update user profile")
         print("   python main.py --chat [user_id]      # Start interactive chatbot")
         print("   python main.py --tutor-demo          # Demo TutorAgent with RAG")
-        print("   python main.py --full                # Demo full system with all agents")
         print("\n   [user_id] is optional and defaults to 'default_user'")
         print("\nDefaulting to chatbot...\n")
         start_chatbot(user_id)
