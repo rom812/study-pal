@@ -32,7 +32,6 @@ from core.workflow_nodes import (
     analyzer_agent_node,
     motivator_agent_node,
     route_after_scheduler,
-    route_after_tutor,
     route_after_analyzer,
 )
 
@@ -126,14 +125,8 @@ def create_study_pal_graph():
         },
     )
 
-    graph_builder.add_conditional_edges(
-        "tutor",
-        route_after_tutor,
-        {
-            "analyzer": "analyzer",
-            "__end__": END,
-        },
-    )
+    # Tutor always goes to END - Intent Router handles all routing
+    graph_builder.add_edge("tutor", END)
 
     graph_builder.add_conditional_edges(
         "analyzer",

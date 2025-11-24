@@ -42,7 +42,7 @@ from core.langgraph_chatbot import LangGraphChatbot
 class TerminalSimulator:
     """Simple terminal interface for testing the chatbot."""
 
-    def __init__(self, user_id: str = "terminal_user"):
+    def __init__(self, user_id: str = "sheynis"):
         """Initialize the terminal simulator."""
         self.user_id = user_id
         self.chatbot = None
@@ -184,7 +184,7 @@ class TerminalSimulator:
         # Execute command
         if command == 'chat':
             self.chat(args)
-        elif command == 'upload':
+        elif command == 'upload' or command == '/upload' or command == '/ingest':
             self.upload(args)
         elif command == 'status':
             self.show_status()
