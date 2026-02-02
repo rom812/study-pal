@@ -104,6 +104,10 @@ try:
             logger.info("User interrupted (Ctrl+C)")
             print("\n\n👋 Goodbye!")
             break
+        except EOFError:
+            logger.info("No more input (EOF)")
+            print("\n👋 Goodbye!")
+            break
         except Exception as e:
             logger.error(f"Error during chat: {e}", exc_info=True)
             print(f"\n❌ Error: {e}\n")

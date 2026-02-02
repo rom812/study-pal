@@ -105,3 +105,6 @@ class StudyPalState(TypedDict):
 
     # Optional profile/context info used by motivator
     user_profile: Optional[dict]
+
+    # Avatar for current agent (emoji-based for visual distinction)
+    current_agent_avatar: Optional[str]

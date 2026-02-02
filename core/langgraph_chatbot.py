@@ -82,6 +82,7 @@ class LangGraphChatbot:
             "awaiting_schedule_confirmation": False,
             "awaiting_schedule_details": False,
             "pending_schedule_request": None,
+            "current_agent_avatar": None,
         }
 
         # Add memory interface that ChatInterface expects
@@ -232,3 +233,9 @@ class LangGraphChatbot:
     def get_schedule(self) -> dict:
         """Get the last generated schedule."""
         return self.conversation_state.get("generated_schedule")
+
+    def get_current_avatar(self) -> str:
+        """Get the emoji avatar for the current agent."""
+        from core.agent_avatars import get_agent_avatar, get_user_avatar
+        avatar = self.conversation_state.get("current_agent_avatar")
+        return avatar if avatar else get_agent_avatar("system")

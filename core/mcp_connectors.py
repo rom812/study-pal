@@ -10,10 +10,19 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 
 import anyio
-import mcp
-from mcp import types
-from mcp.client.session_group import ClientSessionGroup, StreamableHttpParameters
-from mcp.shared.exceptions import McpError
+
+try:
+    import mcp
+    from mcp import types
+    from mcp.client.session_group import ClientSessionGroup, StreamableHttpParameters
+    from mcp.shared.exceptions import McpError
+    MCP_AVAILABLE = True
+except ImportError:
+    MCP_AVAILABLE = False
+    # Dummy classes for type hinting if needed or just skip
+    class McpError(Exception): pass
+    ClientSessionGroup = object 
+    StreamableHttpParameters = object
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +53,11 @@ class CalendarConnector:
             self.create_event_tool = tool_override
 
     def create_event(self, payload: dict) -> None:
+        if not MCP_AVAILABLE:
+            logger.warning("MCP library not available. Calendar sync skipped.")
+            print("ℹ️  Calendar sync skipped (MCP library missing)")
+            return
+
         if not isinstance(payload, dict):
             raise TypeError("Calendar payload must be provided as a dictionary.")
 
@@ -209,14 +223,8 @@ class CalendarConnector:
         return " ".join(text_chunks).strip() or "Unknown error from MCP tool."
 
     def update_event(self, event_id: str, payload: dict) -> None:
+        if not MCP_AVAILABLE:
+            logger.warning("MCP library not available. Calendar update skipped.")
+            return
         # TODO: update events via MCP
         _ = (event_id, payload)
-
-
-@dataclass
-class MailConnector:
-    """Handles outbound email reminders through MCP."""
-
-    def send_email(self, payload: dict) -> None:
-        # TODO: send emails via Gmail MCP connector
-        _ = payload

@@ -47,6 +47,8 @@ class ChromaVectorStore:
             settings=Settings(
                 anonymized_telemetry=False,
                 allow_reset=True,
+                is_persistent=True,
+                persist_directory=str(persist_directory),
             ),
         )
 

@@ -168,7 +168,10 @@ class SchedulerAgent:
             "You are Study Pal's scheduling assistant.\n"
             "Extract the user's study availability and subjects from the note below and respond ONLY with JSON.\n"
             "Required keys: start_time (HH:MM 24-hour), end_time (HH:MM 24-hour), subjects (array of strings).\n"
-            "Optional key: notes (string) for assumptions or clarifications.\n"
+            "Optional keys:\n"
+            "  - date (YYYY-MM-DD format): The specific date for the session. If user says 'today', use today's date. If 'tomorrow', use tomorrow's date. If a day of week (Monday, Tuesday, etc.), calculate the next occurrence of that day.\n"
+            "  - notes (string): Any assumptions or clarifications.\n"
+            f"Today's date is: {datetime.now().strftime('%Y-%m-%d (%A)')}\n"
             f"USER_NOTE: {user_input}\n"
         )
         if llm is None:
@@ -208,6 +211,19 @@ class SchedulerAgent:
     def _build_pomodoro_plan(self, preferences: dict) -> list[dict]:
         start = self._parse_clock(preferences["start_time"])
         end = self._parse_clock(preferences["end_time"])
+
+        # Parse session date if provided
+        session_date = preferences.get("date")
+        if session_date:
+            try:
+                # Parse the date and combine with times
+                date_obj = datetime.strptime(session_date, "%Y-%m-%d").date()
+                start = datetime.combine(date_obj, start.time())
+                end = datetime.combine(date_obj, end.time())
+            except (ValueError, TypeError):
+                # If date parsing fails, use today's date
+                logger.warning(f"Could not parse date '{session_date}', using today's date")
+
         if end <= start:
             raise ValueError("End time must be after start time.")
 
@@ -218,38 +234,103 @@ class SchedulerAgent:
         subjects = preferences["subjects"]
         subject_index = 0
         current = start
+        session_count_per_subject = {}  # Track how many sessions per subject
 
-        while current + pomodoro_delta <= end:
-            block_end = current + pomodoro_delta
-            subject = subjects[subject_index % len(subjects)]
-            sessions.append(
-                {
-                    "type": "study",
-                    "subject": subject,
-                    "start": current.strftime("%H:%M"),
-                    "end": block_end.strftime("%H:%M"),
-                }
-            )
-            current = block_end
+        # Fill the entire time window with sessions
+        while current < end:
+            # Check if we can fit a full Pomodoro block
+            if current + pomodoro_delta <= end:
+                block_end = current + pomodoro_delta
+                subject = subjects[subject_index % len(subjects)]
 
-            if current + break_delta > end:
+                # Track session count
+                session_count_per_subject[subject] = session_count_per_subject.get(subject, 0) + 1
+                session_num = session_count_per_subject[subject]
+
+                # Add variety to task descriptions
+                task_description = self._generate_task_description(subject, session_num)
+
+                sessions.append(
+                    {
+                        "type": "study",
+                        "subject": subject,
+                        "task": task_description,
+                        "start": current.strftime("%H:%M"),
+                        "end": block_end.strftime("%H:%M"),
+                        "start_datetime": current.isoformat(),
+                        "end_datetime": block_end.isoformat(),
+                        "date": current.strftime("%Y-%m-%d"),
+                        "day_name": current.strftime("%A"),
+                    }
+                )
+                current = block_end
+
+                # Add break if there's room
+                if current + break_delta <= end:
+                    break_end = current + break_delta
+                    sessions.append(
+                        {
+                            "type": "break",
+                            "start": current.strftime("%H:%M"),
+                            "end": break_end.strftime("%H:%M"),
+                            "start_datetime": current.isoformat(),
+                            "end_datetime": break_end.isoformat(),
+                            "date": current.strftime("%Y-%m-%d"),
+                            "day_name": current.strftime("%A"),
+                        }
+                    )
+                    current = break_end
+                    subject_index += 1
+                else:
+                    # Not enough room for a break, but continue to fill window
+                    break
+            else:
+                # Not enough time for a full Pomodoro, but we have time left
+                # Create a shorter study session to fill the remaining time
+                remaining_minutes = int((end - current).total_seconds() / 60)
+                if remaining_minutes >= 10:  # Only add if at least 10 minutes remain
+                    subject = subjects[subject_index % len(subjects)]
+                    session_count_per_subject[subject] = session_count_per_subject.get(subject, 0) + 1
+                    session_num = session_count_per_subject[subject]
+                    task_description = self._generate_task_description(subject, session_num)
+
+                    sessions.append(
+                        {
+                            "type": "study",
+                            "subject": subject,
+                            "task": task_description,
+                            "start": current.strftime("%H:%M"),
+                            "end": end.strftime("%H:%M"),
+                            "start_datetime": current.isoformat(),
+                            "end_datetime": end.isoformat(),
+                            "date": current.strftime("%Y-%m-%d"),
+                            "day_name": current.strftime("%A"),
+                            "duration_note": f"{remaining_minutes} min session",
+                        }
+                    )
                 break
-
-            break_end = current + break_delta
-            sessions.append(
-                {
-                    "type": "break",
-                    "start": current.strftime("%H:%M"),
-                    "end": break_end.strftime("%H:%M"),
-                }
-            )
-            current = break_end
-            subject_index += 1
 
         if not sessions:
             raise ValueError("No Pomodoro blocks fit within the provided availability window.")
 
         return sessions
+
+    def _generate_task_description(self, subject: str, session_number: int) -> str:
+        """Generate varied task descriptions based on subject and session number."""
+        task_templates = [
+            "Learn core concepts",
+            "Practice exercises",
+            "Review and reinforce",
+            "Work on problem sets",
+            "Deep dive practice",
+            "Master fundamentals",
+            "Apply concepts",
+            "Quiz yourself",
+        ]
+
+        # Cycle through different task types
+        template = task_templates[(session_number - 1) % len(task_templates)]
+        return f"{template} - {subject}"
 
     def _prioritize_weak_topics(
         self,
@@ -318,6 +399,7 @@ class SchedulerAgent:
     def _heuristic_preferences(self, user_input: str, context: dict | None) -> dict:
         start_time, end_time = self._extract_time_range(user_input)
         subjects = self._extract_subjects(user_input)
+        session_date = self._extract_date(user_input)
 
         if context:
             topic = context.get("topic")
@@ -333,12 +415,48 @@ class SchedulerAgent:
         if self._time_to_minutes(end_time) <= self._time_to_minutes(start_time):
             end_time = self._add_minutes(start_time, 60)
 
-        return {
+        result = {
             "start_time": start_time,
             "end_time": end_time,
             "subjects": subjects,
             "notes": "Generated via heuristic parser (LLM unavailable).",
         }
+
+        if session_date:
+            result["date"] = session_date
+
+        return result
+
+    def _extract_date(self, text: str) -> str | None:
+        """Extract date from user input (today, tomorrow, or day of week)."""
+        text_lower = text.lower()
+        now = datetime.now()
+
+        # Check for "today"
+        if "today" in text_lower:
+            return now.strftime("%Y-%m-%d")
+
+        # Check for "tomorrow"
+        if "tomorrow" in text_lower:
+            return (now + timedelta(days=1)).strftime("%Y-%m-%d")
+
+        # Check for day of week
+        days_of_week = {
+            "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
+            "friday": 4, "saturday": 5, "sunday": 6
+        }
+
+        for day_name, day_num in days_of_week.items():
+            if day_name in text_lower:
+                # Calculate next occurrence of this day
+                current_day = now.weekday()
+                days_ahead = (day_num - current_day) % 7
+                if days_ahead == 0:
+                    days_ahead = 7  # If it's today, schedule for next week
+                target_date = now + timedelta(days=days_ahead)
+                return target_date.strftime("%Y-%m-%d")
+
+        return None
 
     def _extract_time_range(self, text: str) -> tuple[str | None, str | None]:
         range_pattern = re.compile(

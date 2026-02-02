@@ -21,13 +21,17 @@ venv/
 env/
 ENV/
 
-# Data outputs
+# Data outputs (user/runtime data – do not commit)
 /data/embeddings/
 /data/study_materials/
 /data/logs/
 /data/test_profiles/
 /data/profiles/
 /data/chroma_db/
+/data/test_chroma/
+/data/uploads/
+/data/quotes_store.json
+*.sqlite3
 
 # Credentials and secrets
 configs/credentials.json
@@ -56,3 +60,6 @@ logs/
 
 # Jupyter
 .ipynb_checkpoints
+
+# Local tooling / context (may contain project-specific or sensitive notes)
+.octocode/

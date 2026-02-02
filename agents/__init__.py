@@ -2,10 +2,17 @@
 
 from .scheduler_agent import OpenAIConversationModel, SchedulerAgent
 from .motivator_agent import MotivatorAgent, OpenAIMotivationModel
-from .tutor_agent import TutorAgent
 from .quote_store import Quote, QuoteStore
 from .user_profile import UserProfile, UserProfileStore, UserProgressEvent
 from .weakness_detector_agent import WeaknessDetectorAgent
+
+try:
+    from .tutor_agent import TutorAgent
+    _tutor_available = True
+except ImportError as e:
+    TutorAgent = None  # type: ignore
+    _tutor_available = False
+    _tutor_import_error = str(e)
 
 try:
     from .quote_scraper import WebSearchQuoteScraper, PersonalizedQuoteGenerator

@@ -39,7 +39,7 @@ class TutorChatbot:
     """
 
     tutor_agent: TutorAgent
-    model_name: str = "gpt-4o-mini"
+    model_name: str = "gpt-4o"
     temperature: float = 0.7
     memory_k: int = 20  # Number of messages to remember (10 exchanges)
 
@@ -172,7 +172,7 @@ class TutorChatbot:
             "understand ONLY their study materials.\n\n"
             "CRITICAL RULES - YOU MUST FOLLOW THESE:\n"
             "1. ONLY answer questions based on the provided context from study materials\n"
-            "2. If the context does NOT contain information to answer the question, you MUST say:\n"
+            "2. If the context does NOT contain information to answer the question and also the student doesn't ask a general question like: 'what can u teach me?' or 'hello how are you' (these kind of questions you can answer and be polite) else:, you MUST say\n"
             "   'I cannot answer this question based on your study materials. Please ask about topics covered in your uploaded PDFs.'\n"
             "3. NEVER use your general knowledge or make up information\n"
             "4. NEVER hallucinate or invent facts not in the context\n"
