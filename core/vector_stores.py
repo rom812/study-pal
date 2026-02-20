@@ -59,8 +59,7 @@ class ChromaVectorStore:
             embedding_function=embedding_function,
         )
 
-        print(f"[vector_store] Initialized ChromaDB at {persist_directory}")
-        print(f"[vector_store] Collection: {collection_name}")
+        print(f"[vector_store] Initialized collection: {collection_name}")
 
     def add_documents(self, docs: Iterable[dict | Document]) -> list[str]:
         """

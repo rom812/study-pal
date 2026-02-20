@@ -18,10 +18,7 @@ _mock_embeddings.embed_query.return_value = [0.1] * 3072
 
 
 # Patch at module level
-_embeddings_patcher = patch(
-    "langchain_openai.OpenAIEmbeddings",
-    return_value=_mock_embeddings
-)
+_embeddings_patcher = patch("langchain_openai.OpenAIEmbeddings", return_value=_mock_embeddings)
 _embeddings_patcher.start()
 
 
@@ -35,4 +32,3 @@ def setup_test_env():
 
 
 # TODO: add fixtures for vector stores, MCP stubs, configuration, etc.
-

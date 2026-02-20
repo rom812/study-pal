@@ -33,8 +33,7 @@ class MotivationLLM(Protocol):
         persona: str,
         quote: Quote,
         profile: UserProfile,
-    ) -> str:
-        ...
+    ) -> str: ...
 
 
 class MotivationMessage(BaseModel):
@@ -92,8 +91,7 @@ class MotivatorAgent:
         if scraper is None:
             if WebSearchQuoteScraper is None:
                 raise ImportError(
-                    "WebSearchQuoteScraper is not available. "
-                    "Ensure quote_scraper.py is imported correctly."
+                    "WebSearchQuoteScraper is not available. Ensure quote_scraper.py is imported correctly."
                 )
             scraper = WebSearchQuoteScraper()
 
@@ -112,7 +110,7 @@ class MotivatorAgent:
         if not self.llm:
             raise RuntimeError("LLM is required for personalized message generation")
 
-        print(f"[motivator] Generating personalized message...")
+        print("[motivator] Generating personalized message...")
         text = self.llm.generate(
             persona=persona,
             quote=quote,
@@ -152,7 +150,7 @@ class OpenAIMotivationModel:
         "You are Study Pal's Motivator Agent. "
         "You speak on behalf of the chosen persona to encourage a student. "
         "Always follow this structure:\n"
-        "1) First line: an exact quote from the persona (if provided), formatted as \"quote\" — Persona Name. "
+        '1) First line: an exact quote from the persona (if provided), formatted as "quote" — Persona Name. '
         "   If no quote is provided, craft a short, persona-aligned mantra.\n"
         "2) Second line: a personalized message directly addressing the student by name. "
         "   Reference their weaknesses/struggles, study goals, or current focus. "
@@ -160,7 +158,7 @@ class OpenAIMotivationModel:
         "   Be uplifting but concise (2-3 sentences max).\n\n"
         "Example:\n"
         "Input: persona=DJ Khaled, name=Rom, weaknesses=[procrastination], main_goal=finding a job\n"
-        "Output: \"Don't play yourself\" — DJ Khaled\n"
+        'Output: "Don\'t play yourself" — DJ Khaled\n'
         "Rom, I know you're struggling with procrastination, but don't ever play yourself! "
         "You only have one life and you must grasp it and find that job. The key to success is taking action today.\n\n"
         "Never add extra commentary. Avoid emojis. Stay authentic to the persona's tone and speaking style."

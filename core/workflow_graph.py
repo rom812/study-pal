@@ -21,19 +21,20 @@ Visual representation:
 """
 
 import logging
-from langgraph.graph import StateGraph, END
-from langgraph.checkpoint.memory import MemorySaver
 
-from core.workflow_state import StudyPalState
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph import END, StateGraph
+
 from core.workflow_nodes import (
-    intent_router_node,
-    tutor_agent_node,
-    scheduler_agent_node,
     analyzer_agent_node,
+    intent_router_node,
     motivator_agent_node,
-    route_after_scheduler,
     route_after_analyzer,
+    route_after_scheduler,
+    scheduler_agent_node,
+    tutor_agent_node,
 )
+from core.workflow_state import StudyPalState
 
 logger = logging.getLogger(__name__)
 
@@ -155,6 +156,7 @@ def create_study_pal_graph():
 # =============================================================================
 # Helper function to run the graph
 # =============================================================================
+
 
 def run_workflow(user_message: str, user_id: str = "default_user", session_id: str = "default") -> dict:
     """

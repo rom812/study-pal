@@ -46,9 +46,7 @@ class QuoteStore:
 
     def _persist_cache(self) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        data = [
-            quote.model_dump(mode="json", exclude_none=True) for quote in self._load_cache()
-        ]
+        data = [quote.model_dump(mode="json", exclude_none=True) for quote in self._load_cache()]
         self.path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
     # Public API -------------------------------------------------------

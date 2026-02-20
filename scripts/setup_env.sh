@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+# Always run from project root
+cd "$(dirname "$0")/.."
+
 echo "🛠️  Setting up Study Pal environment..."
 echo ""
 
@@ -51,9 +54,8 @@ source .venv/bin/activate
 if [ "$VENV_JUST_CREATED" = true ] || [ "$INSTALL_DEPS" = true ]; then
     echo "📦 Installing Python dependencies (this can take a few minutes)..."
     pip install -r requirements.txt
-    pip install -r api/requirements.txt
 else
-    echo "✅ Skipping Python deps (already installed). Use ./setup_env.sh --install-deps to reinstall."
+    echo "✅ Skipping Python deps (already installed). Use ./scripts/setup_env.sh --install-deps to reinstall."
 fi
 
 # 4. Install Frontend Dependencies (only when missing or --install-deps)
@@ -63,10 +65,10 @@ if [ ! -d "frontend/node_modules" ] || [ "$INSTALL_DEPS" = true ]; then
     npm install
     cd ..
 else
-    echo "✅ Skipping Frontend deps (node_modules exists). Use ./setup_env.sh --install-deps to reinstall."
+    echo "✅ Skipping Frontend deps (node_modules exists). Use ./scripts/setup_env.sh --install-deps to reinstall."
 fi
 
 echo ""
 echo "🎉 Setup complete!"
 echo "👉 1. Add your OPENAI_API_KEY to .env"
-echo "👉 2. Run ./start_dev.sh to start the app"
+echo "👉 2. Run ./scripts/start_dev.sh to start the app"

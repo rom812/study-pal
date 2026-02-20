@@ -7,10 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from langchain_community.chat_message_histories import ChatMessageHistory
-from langchain_core.chat_history import BaseChatMessageHistory
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_openai import ChatOpenAI
 
 from agents.tutor_agent import TutorAgent
@@ -65,7 +62,7 @@ class TutorChatbot:
 
         print(f"[chatbot] Initialized with model: {self.model_name}")
         print(f"[chatbot] Memory: last {self.memory_k // 2} exchanges")
-        print(f"[chatbot] Cost-optimized: Using gpt-4o-mini for 98% cost savings")
+        print("[chatbot] Cost-optimized: Using gpt-4o-mini for 98% cost savings")
 
     def chat(self, user_message: str, k: int = 3) -> str:
         """
@@ -185,9 +182,7 @@ class TutorChatbot:
         )
 
         if context_chunks:
-            context_text = "\n\n".join(
-                f"[Context {i+1}]:\n{chunk}" for i, chunk in enumerate(context_chunks)
-            )
+            context_text = "\n\n".join(f"[Context {i + 1}]:\n{chunk}" for i, chunk in enumerate(context_chunks))
             return (
                 f"{base_prompt}\n\n"
                 f"RELEVANT CONTEXT FROM STUDY MATERIALS:\n{context_text}\n\n"
@@ -348,7 +343,7 @@ class ChatInterface:
         from core.langgraph_chatbot import LangGraphChatbot
 
         if isinstance(self.chatbot, LangGraphChatbot):
-            print(f"  Mode: LangGraph Multi-Agent System")
+            print("  Mode: LangGraph Multi-Agent System")
             print(f"  User ID: {self.chatbot.user_id}")
             print(f"  Knowledge base: {self.chatbot.get_materials_count()} chunks")
             print(f"  {self.chatbot.get_conversation_summary()}")
@@ -359,7 +354,7 @@ class ChatInterface:
                 print(f"  Last detected intent: {last_intent}")
         else:
             # Legacy TutorChatbot
-            print(f"  Mode: Legacy Chatbot")
+            print("  Mode: Legacy Chatbot")
             print(f"  Model: {self.chatbot.model_name}")
             print(f"  Temperature: {self.chatbot.temperature}")
             print(f"  Knowledge base: {self.chatbot.get_materials_count()} chunks")

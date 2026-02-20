@@ -6,9 +6,9 @@ import re
 from pathlib import Path
 from typing import Any
 
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_core.documents import Document
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 
 def clean_spaced_text(text: str) -> str:
@@ -39,12 +39,12 @@ def clean_spaced_text(text: str) -> str:
 
         # First pass: merge single letters/digits separated by single spaces
         # e.g., "H e l l o" -> "Hello"
-        result = re.sub(r'\b(\w)\s+(?=\w\s|\w\b)', r'\1', result)
+        result = re.sub(r"\b(\w)\s+(?=\w\s|\w\b)", r"\1", result)
 
         # Second pass: clean up any remaining obvious patterns
         # e.g., "R o m" -> "Rom"
         while True:
-            new_result = re.sub(r'\b(\w)\s+(\w)\s+(\w)', r'\1\2\3', result)
+            new_result = re.sub(r"\b(\w)\s+(\w)\s+(\w)", r"\1\2\3", result)
             if new_result == result:
                 break
             result = new_result

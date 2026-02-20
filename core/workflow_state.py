@@ -5,10 +5,11 @@ This module defines the shared state that all agents use to communicate.
 Think of it as a shared notebook where agents write their results and read what others wrote.
 """
 
-from typing import Annotated, Optional, Any, Literal
-from typing_extensions import TypedDict
-from langgraph.graph.message import add_messages
+from typing import Annotated, Any, Literal, Optional
+
 from langchain_core.messages import BaseMessage
+from langgraph.graph.message import add_messages
+from typing_extensions import TypedDict
 
 
 class StudyPalState(TypedDict):

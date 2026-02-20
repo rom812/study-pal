@@ -3,10 +3,11 @@ Simple terminal-based Study Pal (no Gradio needed).
 Run this if Gradio is causing issues.
 """
 
-import os
 import logging
-from pathlib import Path
+import os
 from datetime import datetime
+from pathlib import Path
+
 from dotenv import load_dotenv
 
 # Load environment
@@ -22,11 +23,8 @@ log_filename = logs_dir / f"terminal_app_{datetime.now().strftime('%Y%m%d_%H%M%S
 # Configure logging to both file and console
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler(log_filename),
-        logging.StreamHandler()
-    ]
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[logging.FileHandler(log_filename), logging.StreamHandler()],
 )
 logger = logging.getLogger(__name__)
 
@@ -40,6 +38,7 @@ logger.info("Starting Study Pal Terminal Interface")
 try:
     logger.info("Importing LangGraphChatbot...")
     from core.langgraph_chatbot import LangGraphChatbot
+
     logger.info("✓ Import successful")
 
     # Create chatbot instance
@@ -63,19 +62,19 @@ try:
             if not user_input:
                 continue
 
-            if user_input.lower() in ['quit', 'exit', 'q']:
+            if user_input.lower() in ["quit", "exit", "q"]:
                 logger.info("User requested exit")
                 print("\n👋 Goodbye!")
                 break
 
-            if user_input.lower() == 'clear':
+            if user_input.lower() == "clear":
                 logger.info("Clearing conversation")
                 result = chatbot.clear_conversation()
                 logger.info(f"Conversation cleared: {result}")
                 print(f"\n✅ {result}\n")
                 continue
 
-            if user_input.lower() == 'upload':
+            if user_input.lower() == "upload":
                 file_path = input("Enter path to PDF file: ").strip()
                 logger.info(f"Upload requested: {file_path}")
                 if os.path.exists(file_path):

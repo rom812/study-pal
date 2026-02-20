@@ -13,11 +13,11 @@ Each worker (node) does their job and passes the work to the next worker.
 import logging
 from typing import Optional
 
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, BaseMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
 
-from core.workflow_state import StudyPalState
 from core.agent_avatars import get_agent_avatar
+from core.workflow_state import StudyPalState
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +56,7 @@ def _format_history(messages: list[BaseMessage], last_n: int = 3) -> str:
 # =============================================================================
 # LLM-Based Intent Classification
 # =============================================================================
+
 
 def classify_intent_with_llm(user_message: str, conversation_history: list[BaseMessage]) -> str:
     """
@@ -106,6 +107,7 @@ Reply with ONE WORD only: tutor, scheduler, analyzer, or motivator"""
 # =============================================================================
 # NODE 1: Intent Router - Figures out what the user wants
 # =============================================================================
+
 
 def intent_router_node(state: StudyPalState) -> dict:
     """
@@ -188,6 +190,7 @@ def intent_router_node(state: StudyPalState) -> dict:
 # NODE 2: Tutor Agent - Answers questions using RAG
 # =============================================================================
 
+
 def tutor_agent_node(state: StudyPalState) -> dict:
     """
     Answer user's questions using the RAG-powered tutor.
@@ -245,7 +248,7 @@ def tutor_agent_node(state: StudyPalState) -> dict:
 
     if context:
         llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.7)
-        context_text = "\n\n".join([f"[Chunk {i+1}]\n{chunk}" for i, chunk in enumerate(context)])
+        context_text = "\n\n".join([f"[Chunk {i + 1}]\n{chunk}" for i, chunk in enumerate(context)])
 
         conversation_history = ""
         recent_messages = state["messages"][-7:-1] if len(state["messages"]) > 1 else []
@@ -278,7 +281,7 @@ WHAT YOU CAN DO WHEN CONTEXT IS AVAILABLE:
 - Use the recent conversation history to maintain context and continuity
 - If context has formatting issues, interpret it as best you can
 
-Student's name: {state.get('user_name', 'there')}
+Student's name: {state.get("user_name", "there")}
 
 Remember: Your job is to help students learn ONLY from their uploaded materials. Be friendly for greetings and encouragement, but strict about staying on topic for actual learning content."""
 
@@ -299,10 +302,7 @@ Please respond based on the context and conversation history above."""
         answer = response.content
         logger.info(f"   ✓ Generated answer: {answer[:50]}...")
     else:
-        answer = (
-            "I don't have any study materials loaded yet. "
-            "Please upload a PDF using /ingest command first."
-        )
+        answer = "I don't have any study materials loaded yet. Please upload a PDF using /ingest command first."
         logger.info("   ⚠️  No study materials available")
 
     # Update the current topic if we can extract it
@@ -323,6 +323,7 @@ Please respond based on the context and conversation history above."""
 # NODE 3: Scheduler Agent - Creates study schedules
 # =============================================================================
 
+
 def scheduler_agent_node(state: StudyPalState) -> dict:
     """
     Generate a study schedule based on user availability.
@@ -337,9 +338,10 @@ def scheduler_agent_node(state: StudyPalState) -> dict:
     """
     logger.info("📅 Scheduler Agent: Creating study plan...")
 
-    from agents.scheduler_agent import SchedulerAgent
-    from core.mcp_connectors import CalendarConnector
     import re
+
+    from agents.scheduler_agent import SchedulerAgent
+    from core.google_calendar import GoogleCalendarClient
 
     # Get user's message
     last_message = _get_last_human_message(state["messages"]) or state["messages"][-1]
@@ -360,7 +362,7 @@ def scheduler_agent_node(state: StudyPalState) -> dict:
         if any(word in normalized.split() for word in affirmative_words) or normalized in affirmative_words:
             message = (
                 "Great! When would you like your next study session? "
-                "Please share a specific day and time window (e.g., \"Tuesday 14:00-16:00\")."
+                'Please share a specific day and time window (e.g., "Tuesday 14:00-16:00").'
             )
             return {
                 "messages": [AIMessage(content=message)],
@@ -386,7 +388,7 @@ def scheduler_agent_node(state: StudyPalState) -> dict:
                 "current_agent_avatar": get_agent_avatar("scheduler"),
             }
 
-        message = "Just let me know with a simple \"yes\" or \"no\" if you'd like me to schedule your next session."
+        message = 'Just let me know with a simple "yes" or "no" if you\'d like me to schedule your next session.'
         return {
             "messages": [AIMessage(content=message)],
             "awaiting_schedule_confirmation": True,
@@ -433,7 +435,7 @@ def scheduler_agent_node(state: StudyPalState) -> dict:
         if not (has_day_reference and has_time_reference):
             message = (
                 "To lock in the session, I need both a day and a time window. "
-                "For example: \"Thursday from 18:00-20:00\" or \"Saturday 10am-12pm\"."
+                'For example: "Thursday from 18:00-20:00" or "Saturday 10am-12pm".'
             )
             return {
                 "messages": [AIMessage(content=message)],
@@ -454,7 +456,7 @@ def scheduler_agent_node(state: StudyPalState) -> dict:
             logger.info("   User confirmed calendar sync")
 
             # Sync to calendar
-            calendar_connector = CalendarConnector()
+            calendar_connector = GoogleCalendarClient()
             scheduler = SchedulerAgent(calendar_connector=calendar_connector)
 
             try:
@@ -491,7 +493,7 @@ def scheduler_agent_node(state: StudyPalState) -> dict:
                 }
 
     # Create scheduler
-    calendar_connector = CalendarConnector()
+    calendar_connector = GoogleCalendarClient()
     scheduler = SchedulerAgent(calendar_connector=calendar_connector)
 
     # === EXTRACT WEAK POINTS FROM ANALYZER ===
@@ -513,13 +515,13 @@ def scheduler_agent_node(state: StudyPalState) -> dict:
     # If no subjects mentioned AND we have weak points, inject them
     if not has_subject_keywords and prioritized_recommendations:
         weak_topics = []
-        if hasattr(prioritized_recommendations, '__iter__'):
+        if hasattr(prioritized_recommendations, "__iter__"):
             # It's a list of WeakPoint objects or dicts
             for wp in prioritized_recommendations:
-                if hasattr(wp, 'topic'):
+                if hasattr(wp, "topic"):
                     weak_topics.append(wp.topic)
-                elif isinstance(wp, dict) and 'topic' in wp:
-                    weak_topics.append(wp['topic'])
+                elif isinstance(wp, dict) and "topic" in wp:
+                    weak_topics.append(wp["topic"])
 
         if weak_topics:
             # Add weak point topics to user input for scheduler parsing
@@ -533,29 +535,59 @@ def scheduler_agent_node(state: StudyPalState) -> dict:
         # No subjects and no weak points - use generic fallback
         user_input += " studying General Topics"
 
-    # Build context
-    context = {
-        "user_input": user_input,
-        "user_id": state["user_id"]
-    }
+    # Build context - inject current date awareness so scheduler can resolve relative dates
+    from datetime import datetime
+
+    current_date = datetime.now()
+    date_context = f" (Today is {current_date.strftime('%A, %B %d, %Y')})"
+    context = {"user_input": user_input + date_context, "user_id": state["user_id"]}
+
+    # === CHECK CALENDAR AVAILABILITY (if configured) ===
+    conflict_warning = ""
+    try:
+        import re as _re
+
+        time_pattern = _re.compile(
+            r"(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:-|to)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?",
+            _re.IGNORECASE,
+        )
+        time_match = time_pattern.search(user_input)
+        date_str = context.get("date")
+
+        if time_match and date_str and hasattr(calendar_connector, "list_events"):
+            start_hh = time_match.group(1)
+            start_mm = time_match.group(2) or "00"
+            end_hh = time_match.group(4)
+            end_mm = time_match.group(5) or "00"
+            conflicts = scheduler.check_availability(
+                date_str, f"{int(start_hh):02d}:{start_mm}", f"{int(end_hh):02d}:{end_mm}"
+            )
+            if conflicts:
+                names = [c.get("summary", "Event") for c in conflicts[:3]]
+                conflict_warning = (
+                    f"\n\n> **Heads up:** You have {len(conflicts)} existing event(s) in this window: "
+                    f"{', '.join(names)}. Consider adjusting your time.\n"
+                )
+    except Exception as exc:
+        logger.debug("Availability pre-check failed (non-critical): %s", exc)
 
     try:
         # Generate schedule, use weak points if available
-        schedule = scheduler.generate_schedule(
-            context=context,
-            recommendations=prioritized_recommendations
-        )
+        schedule = scheduler.generate_schedule(context=context, recommendations=prioritized_recommendations)
 
         # Format nice response
         sessions = schedule.get("sessions", [])
         preferences = schedule.get("preferences", {})
         session_date = preferences.get("date")
 
-        response = f"📚 I've created your study schedule!\n\n"
+        response = "📚 I've created your study schedule!\n\n"
+        if conflict_warning:
+            response += conflict_warning + "\n"
 
         # Show the date if available
         if session_date:
             from datetime import datetime
+
             try:
                 date_obj = datetime.strptime(session_date, "%Y-%m-%d")
                 day_name = date_obj.strftime("%A")
@@ -565,11 +597,11 @@ def scheduler_agent_node(state: StudyPalState) -> dict:
                 pass
 
         # === NEW: Reference analysis in scheduling response ===
-        if analysis_results and hasattr(analysis_results, 'weak_points') and analysis_results.weak_points:
+        if analysis_results and hasattr(analysis_results, "weak_points") and analysis_results.weak_points:
             weak_topics = [wp.topic for wp in analysis_results.weak_points[:3]]
             response += f"📊 Based on your session analysis, I've prioritized: {', '.join(weak_topics)}\n\n"
 
-        study_sessions = [s for s in sessions if s['type'] == 'study']
+        study_sessions = [s for s in sessions if s["type"] == "study"]
         response += f"Found {len(study_sessions)} study sessions filling your entire time window:\n\n"
 
         session_number = 0
@@ -627,6 +659,7 @@ def scheduler_agent_node(state: StudyPalState) -> dict:
 # NODE 4: Analyzer Agent - Finds weak points
 # =============================================================================
 
+
 def analyzer_agent_node(state: StudyPalState) -> dict:
     """
     Analyze the conversation to find weak points and make recommendations.
@@ -662,10 +695,7 @@ def analyzer_agent_node(state: StudyPalState) -> dict:
     detector = WeaknessDetectorAgent(model="gpt-4o-mini")
 
     try:
-        result = detector.analyze_conversation(
-            state["messages"],
-            session_topic=state.get("current_topic")
-        )
+        result = detector.analyze_conversation(state["messages"], session_topic=state.get("current_topic"))
 
         # result is a SessionRecommendations dataclass object
         weak_points = getattr(result, "weak_points", None)
@@ -684,7 +714,7 @@ def analyzer_agent_node(state: StudyPalState) -> dict:
         response = "📊 Session Analysis:\n\n" + "\n".join(bullet_lines)
         response += "\n\nWould you like me to schedule another study session for you? (yes/no)"
 
-        logger.info(f"   ✓ Analysis complete; awaiting scheduling confirmation")
+        logger.info("   ✓ Analysis complete; awaiting scheduling confirmation")
 
         return {
             "messages": [AIMessage(content=response)],
@@ -720,6 +750,7 @@ def analyzer_agent_node(state: StudyPalState) -> dict:
 # NODE 5: Motivator Agent - Provides encouragement
 # =============================================================================
 
+
 def motivator_agent_node(state: StudyPalState) -> dict:
     """
     Generate motivational message based on user's persona preference.
@@ -732,9 +763,10 @@ def motivator_agent_node(state: StudyPalState) -> dict:
     """
     logger.info("💪 Motivator Agent: Crafting motivation...")
 
-    from agents.motivator_agent import MotivatorAgent, OpenAIMotivationModel
-    from agents.user_profile import UserProfileStore, UserProfile
     from pathlib import Path
+
+    from agents.motivator_agent import MotivatorAgent, OpenAIMotivationModel
+    from agents.user_profile import UserProfile, UserProfileStore
 
     try:
         # Load user profile store
@@ -761,15 +793,10 @@ def motivator_agent_node(state: StudyPalState) -> dict:
                 profile_store.save(profile)
 
         # Create motivator
-        motivator = MotivatorAgent(
-            profile_store=profile_store,
-            llm=OpenAIMotivationModel()
-        )
+        motivator = MotivatorAgent(profile_store=profile_store, llm=OpenAIMotivationModel())
 
         # Generate motivation
-        motivation = motivator.craft_personalized_message(
-            user_id=state["user_id"]
-        )
+        motivation = motivator.craft_personalized_message(user_id=state["user_id"])
 
         response = f"{motivation.text}"
         logger.info("   ✓ Generated motivational message")
@@ -801,6 +828,7 @@ def motivator_agent_node(state: StudyPalState) -> dict:
 # =============================================================================
 # Conditional Routing Functions for Multi-Agent Orchestration
 # =============================================================================
+
 
 def route_after_analyzer(state: StudyPalState) -> str:
     """

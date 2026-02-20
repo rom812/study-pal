@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Literal
 
 from langchain_core.messages import BaseMessage, HumanMessage
 
@@ -37,9 +36,7 @@ class WeaknessDetectorAgent:
             temperature: Low temperature for consistent analysis
         """
         if OpenAI is None:
-            raise ImportError(
-                "The 'openai' package is required. Install it via `pip install openai`."
-            )
+            raise ImportError("The 'openai' package is required. Install it via `pip install openai`.")
 
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
@@ -103,7 +100,7 @@ class WeaknessDetectorAgent:
                 priority_topics=[],
                 suggested_focus_time={},
                 study_approach_tips=["Analysis failed. Please try again."],
-                session_summary="Analysis failed"
+                session_summary="Analysis failed",
             )
 
     def _convert_to_recommendations(self, result: dict) -> SessionRecommendations:
@@ -291,9 +288,7 @@ Make tips specific to the actual topics and struggles observed in the conversati
 Now analyze the conversation and respond with JSON only."""
 
 
-def create_weakness_detector_agent(
-    model: str = "gpt-4o-mini", temperature: float = 0.1
-) -> WeaknessDetectorAgent:
+def create_weakness_detector_agent(model: str = "gpt-4o-mini", temperature: float = 0.1) -> WeaknessDetectorAgent:
     """
     Factory function to create a weakness detector agent.
 

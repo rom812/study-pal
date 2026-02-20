@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
+
+# Add project root to sys.path
+sys.path.append(str(Path(__file__).parent.parent))
 
 from dotenv import load_dotenv
 
@@ -11,7 +15,6 @@ from agents.onboarding import create_onboarding_agent
 from agents.tutor_chatbot import ChatInterface, TutorChatbot
 from agents.user_profile import UserProfileStore
 from core.rag_pipeline import get_rag_pipeline
-
 
 load_dotenv(override=True)
 
@@ -39,7 +42,7 @@ def demo_tutor_agent():
     print(f"   ✓ Successfully ingested {num_chunks} chunks\n")
 
     # 2. Check materials count
-    print(f"📊 Step 2: Knowledge base status")
+    print("📊 Step 2: Knowledge base status")
     total_chunks = tutor.count_materials()
     print(f"   Total chunks in knowledge base: {total_chunks}\n")
 
@@ -79,7 +82,7 @@ def demo_tutor_agent():
             preview = context[0][:80] + "..." if len(context[0]) > 80 else context[0]
             print(f"   → {preview}")
         else:
-            print(f"   → No context found")
+            print("   → No context found")
 
     print("\n" + "=" * 60)
     print("✅ DEMO COMPLETE - TutorAgent successfully demonstrated!")
@@ -98,7 +101,11 @@ def run_onboarding(user_id: str = "default_user"):
         print(f"   Name: {existing_profile.name}")
         print(f"   Persona: {existing_profile.primary_persona}")
 
-        overwrite = input("\nDo you want to create a new profile? This will overwrite the existing one. (yes/no): ").strip().lower()
+        overwrite = (
+            input("\nDo you want to create a new profile? This will overwrite the existing one. (yes/no): ")
+            .strip()
+            .lower()
+        )
         if overwrite not in ["yes", "y"]:
             print("Onboarding cancelled.\n")
             return

@@ -1,6 +1,5 @@
 """Tests for TutorAgent - high-level RAG-powered tutoring interface."""
 
-import os
 from pathlib import Path
 
 import pytest
@@ -18,10 +17,7 @@ def test_pdf():
 @pytest.fixture
 def tutor_agent(tmp_path):
     """Create a TutorAgent with temporary storage."""
-    pipeline = RAGPipeline(
-        collection_name="test_tutor",
-        persist_directory=tmp_path / "tutor_test"
-    )
+    pipeline = RAGPipeline(collection_name="test_tutor", persist_directory=tmp_path / "tutor_test")
     return TutorAgent(rag_pipeline=pipeline)
 
 
@@ -143,4 +139,3 @@ def test_context_relevance(tutor_agent, test_pdf):
     # Each should contain relevant keywords
     assert "derivative" in derivative_text or "rate" in derivative_text
     assert "integral" in integral_text or "area" in integral_text
-

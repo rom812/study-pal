@@ -6,9 +6,9 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=flat&logo=fastapi)](https://fastapi.tiangolo.com/)
 [![Next.js](https://img.shields.io/badge/Next.js-18-black?style=flat&logo=next.js)](https://nextjs.org/)
 [![ChromaDB](https://img.shields.io/badge/ChromaDB-Vector%20Store-orange.svg)](https://www.trychroma.com/)
-[![Tests](https://github.com/romsheynis/study_pal/actions/workflows/test.yml/badge.svg)](https://github.com/romsheynis/study_pal/actions)
+[![CI](https://github.com/rom812/study-pal/actions/workflows/ci.yml/badge.svg)](https://github.com/rom812/study-pal/actions)
 
-**Quick Start:** `./start_dev.sh` → open http://localhost:3000 (see [QUICK_START.md](QUICK_START.md))
+**Quick Start:** `./scripts/start_dev.sh` → open http://localhost:3000 (see [Quick Start](docs/quick-start.md))
 
 <div align="center">
   <img src="docs/screenshot.png" alt="Study Pal Chat UI" width="80%" />
@@ -55,10 +55,13 @@ Study Pal is your autonomous study mentor: it plans lessons, delivers personaliz
 | **Intent Router** | Entry point | LLM-based classification: tutoring, scheduling, analysis, or motivation. |
 | **Tutor Agent** | Active session | RAG-powered Q&A, quizzes, explanations; adapts to user level. |
 | **Analyzer Agent** | Post-session | Summaries, strengths/weaknesses, learning objectives; writes to shared state. |
-| **Scheduler Agent** | Planning | Suggests sessions from weak points and availability; optional calendar sync. |
-| **Motivator Agent** | Engagement | Persona-aligned motivational messages using user profile and quotes. |
+| **Weakness Detector** | Deep analysis | Identifies specific knowledge gaps and weak points from session transcripts. |
+| **Scheduler Agent** | Planning | Suggests Pomodoro-style sessions from weak points and availability; optional Google Calendar sync. |
+| **Motivator Agent** | Engagement | Persona-aligned motivational messages using user profile and scraped/generated quotes. |
+| **Onboarding Agent** | First-run setup | Interactive questionnaire: persona selection (e.g. Feynman, Kobe), academic field, goals, pain points. |
+| **Quote Scraper / Generator** | Content | LLM-powered quote retrieval + personalized motivational message generation per user profile. |
 
-Orchestration lives in **LangGraph**: one state machine, one entry (Intent Router), conditional edges to the right agent. Shared state is a `TypedDict` with message history, session flags, and analysis/schedule data. See [ARCHITECTURE_DIAGRAMS.md](ARCHITECTURE_DIAGRAMS.md) for detailed diagrams.
+Orchestration lives in **LangGraph**: one state machine, one entry (Intent Router), conditional edges to the right agent. Shared state is a `TypedDict` (`StudyPalState`) with message history, session flags, analysis/schedule data, and user profile context. See [Architecture](docs/architecture.md) for detailed diagrams.
 
 ---
 
@@ -93,15 +96,48 @@ flowchart TD
 
 ## Tech Stack
 
-| Layer | Technology | Role |
+### Backend & AI
+
+| Layer | Technology | Version / Details |
+|-------|------------|-------------------|
+| **Orchestration** | [LangGraph](https://github.com/langchain-ai/langgraph) | ≥ 0.2 · State machine with nodes, conditional edges, checkpointer |
+| **LLM Framework** | [LangChain](https://www.langchain.com/) | ≥ 0.3 · Chains, prompts, output parsers |
+| **LLM Provider** | [OpenAI](https://platform.openai.com/) (GPT-4o-mini) | ≥ 1.30 · Tutoring, routing, analysis, motivation, quote generation |
+| **Embeddings** | OpenAI `text-embedding-3-large` | Configurable via `configs/settings.yaml` |
+| **Vector Store** | [ChromaDB](https://www.trychroma.com/) | ≥ 0.4 · Per-user collections for RAG retrieval |
+| **Vector Store (alt)** | [Pinecone](https://www.pinecone.io/) | ≥ 3.0 · Optional cloud-based vector store |
+| **API Server** | [FastAPI](https://fastapi.tiangolo.com/) + [Uvicorn](https://www.uvicorn.org/) | ≥ 0.115 / ≥ 0.30 · REST API with async support |
+| **Data Validation** | [Pydantic](https://docs.pydantic.dev/) | ≥ 2.5 · Request/response models, state typing |
+| **PDF Processing** | [pypdf](https://pypdf.readthedocs.io/) | ≥ 3.17 · Extract text from uploaded study materials |
+| **Tokenization** | [tiktoken](https://github.com/openai/tiktoken) | ≥ 0.5 · Token counting for context window management |
+| **HTTP Client** | [httpx](https://www.python-httpx.org/) | ≥ 0.25 · Async HTTP requests |
+| **Calendar** | Google Calendar API | Direct integration via `google-api-python-client` |
+| **Calendar MCP** | `@cocal/google-calendar-mcp` | Node.js 20 · Optional MCP server for calendar sync |
+| **Config** | [python-dotenv](https://github.com/theskumar/python-dotenv) + YAML | `.env` for secrets, `configs/settings.yaml` for app settings |
+| **Testing** | [pytest](https://docs.pytest.org/) | ≥ 7.4 · 20+ test files covering agents, RAG, calendar, onboarding |
+
+### Frontend
+
+| Layer | Technology | Version / Details |
+|-------|------------|-------------------|
+| **Framework** | [Next.js](https://nextjs.org/) | 14.2 · App Router, SSR |
+| **UI Library** | [React](https://react.dev/) | 18.3 · Component-based UI |
+| **Language** | [TypeScript](https://www.typescriptlang.org/) | 5.5 · Type-safe frontend code |
+| **Styling** | [Tailwind CSS](https://tailwindcss.com/) | 3.4 · Utility-first CSS framework |
+| **CSS Processing** | [PostCSS](https://postcss.org/) + [Autoprefixer](https://github.com/postcss/autoprefixer) | CSS transforms and vendor prefixes |
+| **HTTP Client** | [Axios](https://axios-http.com/) | 1.7 · API communication with backend |
+| **Form Handling** | [React Hook Form](https://react-hook-form.com/) + [Zod](https://zod.dev/) | 7.53 / 3.23 · Validated forms (registration, settings) |
+| **Icons** | [Lucide React](https://lucide.dev/) | 0.427 · Modern icon library |
+| **Build Tool** | [SWC](https://swc.rs/) | Rust-based fast compiler for Next.js |
+| **Linting** | [ESLint](https://eslint.org/) | 8.57 · Code quality enforcement |
+
+### Infrastructure & DevOps
+
+| Layer | Technology | Details |
 |-------|------------|------|
-| **Orchestration** | LangGraph | State machine, nodes, conditional edges, checkpointer. |
-| **LLM / chains** | LangChain + OpenAI | GPT-4o-mini for tutoring, routing, analysis, messaging. |
-| **RAG** | ChromaDB + OpenAI embeddings | User materials: chunking, embedding, retrieval in `core/rag_pipeline.py`. |
-| **Backend** | FastAPI | REST API for the Next.js frontend (`api/main.py`). |
-| **Frontend** | Next.js | Chat UI, registration, file upload (`frontend/`). |
-| **CLI** | Python | Full graph in the terminal (`terminal_app.py`). |
-| **Config** | `.env` / env vars | API keys and optional MCP/calendar config. |
+| **Containers** | [Docker](https://www.docker.com/) + [Docker Compose](https://docs.docker.com/compose/) | Python 3.10-slim base; one-command API deployment |
+| **CI/CD** | [GitHub Actions](https://github.com/features/actions) | Automated pytest on push/PR to `main` |
+| **CLI** | Python | Full multi-agent graph in the terminal (`terminal_app.py`) |
 
 ---
 
@@ -138,7 +174,7 @@ Full graph behind a web chat, registration, and file upload.
 
 1. **Backend:** `api/` (FastAPI)  
 2. **Frontend:** `frontend/` (Next.js)  
-3. **Quick start:** See **[QUICK_START.md](QUICK_START.md)** for step-by-step setup (e.g. `./start_dev.sh` or running API and frontend separately).
+3. **Quick start:** See **[Quick Start](docs/quick-start.md)** for step-by-step setup (e.g. `./scripts/start_dev.sh` or running API and frontend separately).
 
 After setup:
 
@@ -170,7 +206,7 @@ docker-compose up --build
 # Frontend: run separately with ./start_dev.sh or see DEPLOY.md
 ```
 
-See [DEPLOY.md](DEPLOY.md) for full deployment options.
+See [Deployment](docs/deployment.md) for full deployment options.
 
 ---
 
@@ -178,49 +214,69 @@ See [DEPLOY.md](DEPLOY.md) for full deployment options.
 
 ```
 study_pal/
-├── agents/                    # Agent implementations
-│   ├── tutor_agent.py         # RAG tutoring, quizzes
-│   ├── scheduler_agent.py     # Study plans, calendar
-│   ├── motivator_agent.py     # Persona-based motivation
-│   ├── weakness_detector_agent.py
-│   ├── user_profile.py        # Profile / persona handling
-│   ├── onboarding.py
-│   └── ...
-├── api/                       # FastAPI backend for Web UI
-│   ├── main.py                # API entry, chat/upload endpoints
-│   └── requirements.txt
-├── core/                      # Graph, state, RAG, chatbot
-│   ├── workflow_graph.py      # LangGraph graph definition
-│   ├── workflow_nodes.py      # Intent router + agent node functions
-│   ├── workflow_state.py      # Shared state (StudyPalState)
-│   ├── langgraph_chatbot.py   # Chatbot wrapper around the graph
-│   ├── rag_pipeline.py        # ChromaDB retrieval pipeline
-│   ├── document_processor.py  # PDF chunking
-│   ├── vector_stores.py       # ChromaDB wrapper
-│   ├── mcp_connectors.py      # Calendar / external services
-│   └── ...
-├── frontend/                  # Next.js chat UI
-│   ├── app/                   # Pages (chat, register, etc.)
-│   └── lib/                   # API client, utils
-├── configs/                   # YAML/config (e.g. settings.yaml)
-├── data/                      # Runtime data (profiles, chroma, quotes)
-├── logs/                      # Runtime logs
-├── scripts/                   # Utilities (e.g. load_quotes.py)
-├── tests/                     # Pytest tests
-├── main.py                    # Tutor-only demo entry
-├── terminal_app.py            # Full graph, terminal UI
-├── start_dev.sh               # Start API + frontend for dev
-├── requirements.txt           # Python deps (root)
-├── QUICK_START.md             # Web UI setup
-├── AGENTS.md                  # For AI agents / contributors
-├── ARCHITECTURE_DIAGRAMS.md    # Mermaid diagrams
-└── README.md                  # This file
+├── agents/                        # Agent implementations
+│   ├── tutor_agent.py             # RAG-powered tutoring & quizzes
+│   ├── tutor_chatbot.py           # Extended tutor chatbot interface
+│   ├── scheduler_agent.py         # Pomodoro study plans + Google Calendar sync
+│   ├── motivator_agent.py         # Persona-based motivational messages
+│   ├── weakness_detector_agent.py # Knowledge gap analysis from transcripts
+│   ├── onboarding.py              # Interactive user onboarding questionnaire
+│   ├── user_profile.py            # User profile / persona handling & storage
+│   ├── quote_scraper.py           # LLM-powered quote retrieval & personalization
+│   └── quote_store.py             # Quote persistence and retrieval
+├── api/                           # FastAPI backend (Web UI)
+│   ├── main.py                    # REST API: chat, upload, profile endpoints
+│   ├── requirements.txt           # API-specific deps (FastAPI, Uvicorn, etc.)
+│   └── run.sh                     # Quick-start script for API server
+├── core/                          # Graph orchestration, state, RAG
+│   ├── workflow_graph.py          # LangGraph graph definition & compilation
+│   ├── workflow_nodes.py          # Intent router + all agent node functions
+│   ├── workflow_state.py          # StudyPalState TypedDict (shared state)
+│   ├── langgraph_chatbot.py       # Multi-agent chatbot wrapper around the graph
+│   ├── rag_pipeline.py            # ChromaDB/Pinecone retrieval pipeline
+│   ├── document_processor.py      # PDF text extraction & chunking (pypdf)
+│   ├── vector_stores.py           # Vector store abstraction (ChromaDB + Pinecone)
+│   ├── weakness_analyzer.py       # Weakness analysis core logic
+│   ├── google_calendar.py         # Google Calendar API client
+│   ├── agent_avatars.py           # Emoji avatars for agent visual distinction
+│   └── utils.py                   # Shared utilities
+├── frontend/                      # Next.js 14 chat UI (TypeScript + Tailwind)
+│   ├── app/                       # App Router pages (chat, register, landing)
+│   ├── lib/                       # API client, utilities
+│   ├── tailwind.config.ts         # Tailwind CSS configuration
+│   ├── tsconfig.json              # TypeScript configuration
+│   └── package.json               # Frontend deps (React, Axios, Zod, etc.)
+├── calendar-mcp/                  # Google Calendar MCP server (Docker)
+│   ├── Dockerfile                 # Node.js 20 MCP server container
+│   └── SETUP.md                   # Calendar MCP setup instructions
+├── configs/                       # Application configuration
+```tree
+.
+├── api/                           # Backend API (FastAPI)
+│   ├── routers/                   # Modular route handlers
+│   ├── models.py                  # Pydantic models
+│   └── dependencies.py            # Shared dependencies
+├── frontend/                      # Frontend UI (Next.js)
+│   ├── app/                       # Next.js pages
+│   ├── components/                # React components
+│   └── lib/                       # API client
+├── agents/                        # AI agent implementations
+├── core/                          # Core system (LangGraph, RAG)
+├── data/                          # Runtime data (profiles, uploads)
+├── docs/                          # Project documentation
+├── scripts/                       # Utility scripts & demos
+├── tests/                         # Test suite
+├── .github/                       # CI workflows
+├── Makefile                       # Developer commands
+├── pyproject.toml                 # Project configuration
+├── requirements.txt               # Python dependencies
+└── README.md                      # This file
 ```
 
 - **Orchestration:** `core/workflow_graph.py`, `core/workflow_nodes.py`, `core/workflow_state.py`  
-- **Agents:** `agents/` (Tutor, Scheduler, Motivator, etc.); nodes in `core/workflow_nodes.py` call them.  
-- **RAG:** `core/rag_pipeline.py`, `core/document_processor.py`, `core/vector_stores.py`  
-- **UIs:** `terminal_app.py` (CLI), `api/main.py` + `frontend/` (Web). No `gradio_app.py`.
+- **Agents:** `agents/` — Tutor, Scheduler, Motivator, Weakness Detector, Onboarding, Quote Scraper; node wrappers in `core/workflow_nodes.py`  
+- **RAG:** `core/rag_pipeline.py`, `core/document_processor.py`, `core/vector_stores.py` (ChromaDB + Pinecone)  
+- **UIs:** `terminal_app.py` (CLI), `api/main.py` + `frontend/` (Web — Next.js 14 + TypeScript + Tailwind CSS)
 
 ---
 
@@ -231,7 +287,7 @@ study_pal/
 | `OPENAI_API_KEY` | Yes | OpenAI API key for LLM and embeddings. |
 | (Others) | No | Optional MCP/calendar or other service config; document in `.env.example` if you add them. |
 
-Create a `.env` in the project root (see `.env.example`). For Web UI, see [QUICK_START.md](QUICK_START.md) for frontend env (e.g. `NEXT_PUBLIC_API_URL`).
+Create a `.env` in the project root (see `.env.example`). For Web UI, see [Quick Start](docs/quick-start.md) for frontend env (e.g. `NEXT_PUBLIC_API_URL`).
 
 ---
 
@@ -242,14 +298,18 @@ Create a `.env` in the project root (see `.env.example`). For Web UI, see [QUICK
 | Intent Router | Every turn | Latest user message, history | `next_agent` | Route to Tutor / Scheduler / Analyzer / Motivator. |
 | Tutor Agent | During study | User question, RAG context | Answers, quizzes | Learning grounded in uploaded material. |
 | Analyzer Agent | After session | Transcript, state | Summary, weak points, scheduling prompt | Reflection and next-step prompts. |
-| Scheduler Agent | On request | Availability, weak points | Pomodoro-style plan, optional calendar events | Turn feedback into concrete plans. |
-| Motivator Agent | On request | User profile | Persona-aligned message | Keep engagement high. |
+| Weakness Detector | After session | Study transcript, Q&A history | Specific weak points, knowledge gaps | Deep analysis of misunderstandings. |
+| Scheduler Agent | On request | Availability, weak points | Pomodoro-style plan, Google Calendar events | Turn feedback into concrete study plans. |
+| Motivator Agent | On request | User profile, persona quotes | Persona-aligned motivational message | Keep engagement high with personalized content. |
+| Onboarding Agent | First run | User input (interactive) | `UserProfile` (name, persona, field, goals) | Interactive setup: persona selection, academic field, goals, pain points. |
+| Quote Scraper | On demand | Persona name | JSON list of quotes | LLM-powered quote retrieval for motivational content. |
+| Quote Generator | On demand | Quote + user profile | Personalized motivational message | Deep personalization connecting persona wisdom to user's journey. |
 
 ---
 
 ## Demo Script (Recruiter Ready)
 
-For a step-by-step demo script (terminal + web), see **[DEMO.md](DEMO.md)**.
+For a step-by-step demo script (terminal + web), see **[Demo](docs/demo.md)**.
 
 1. **Upload materials** – Terminal: type `upload` and provide a PDF path; Web: use the chat upload. Confirm chunk count or success.
 2. **Tutoring** – e.g. “Walk me through support vector machines.” Get an explanation (and optionally a quiz).
@@ -259,7 +319,7 @@ For a step-by-step demo script (terminal + web), see **[DEMO.md](DEMO.md)**.
 6. **Calendar** – If prompted, confirm “Yes” to sync (when MCP/calendar is configured).
 7. **Motivation** – e.g. “Give me a pep talk.” Get a persona-aligned message.
 
-Use **Terminal** (`python terminal_app.py`) or **Web UI** ([QUICK_START.md](QUICK_START.md)). Watch logs to see LangGraph hand-offs.
+Use **Terminal** (`python terminal_app.py`) or **Web UI** ([Quick Start](docs/quick-start.md)). Watch logs to see LangGraph hand-offs.
 
 ---
 
@@ -268,7 +328,7 @@ Use **Terminal** (`python terminal_app.py`) or **Web UI** ([QUICK_START.md](QUIC
 - **Run the full graph:** `python terminal_app.py` or run API + frontend per QUICK_START.
 - **Run tutor-only:** `python main.py`.
 - **Tests:** From repo root, run e.g. `pytest tests/` (see `tests/` for RAG, agents, terminal, etc.). After doc or code changes, run tests to avoid regressions.
-- **Code layout:** Keep graph/state/nodes in `core/`; agent logic in `agents/`; RAG in `core/rag_pipeline.py`. See [AGENTS.md](AGENTS.md) for conventions.
+- **Code layout:** Keep graph/state/nodes in `core/`; agent logic in `agents/`; RAG in `core/rag_pipeline.py`.
 
 ---
 
@@ -276,16 +336,16 @@ Use **Terminal** (`python terminal_app.py`) or **Web UI** ([QUICK_START.md](QUIC
 
 | Document | Purpose |
 |----------|---------|
-| [README.md](README.md) | This file – overview, entry points, structure. |
-| [QUICK_START.md](QUICK_START.md) | Web UI: frontend + API setup, first run, troubleshooting. |
-| [DEPLOY.md](DEPLOY.md) | Run UI locally for demo; deploy frontend + API for a shareable URL. |
-| [AGENTS.md](AGENTS.md) | For contributors and AI agents: architecture, repo layout, conventions. |
-| [ARCHITECTURE_DIAGRAMS.md](ARCHITECTURE_DIAGRAMS.md) | Mermaid diagrams: workflow, RAG, state. |
-| [README_FRONTEND.md](README_FRONTEND.md) | Frontend-specific notes if present. |
+| [README.md](README.md) | Overview, entry points, architecture |
+| [Quick Start](docs/quick-start.md) | Web UI setup and first run |
+| [Deployment](docs/deployment.md) | Docker and AWS deployment |
+| [Architecture](docs/architecture.md) | Mermaid diagrams: workflow, RAG, state |
+| [Demo Script](docs/demo.md) | Step-by-step recruiter demo |
 
 ---
 
 ## Security & Privacy
+
 
 - User/session data is scoped: per-user Chroma collections and LangGraph state where applicable.
 - Materials, analyses, and schedules are not shared across users by design.

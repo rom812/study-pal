@@ -1,6 +1,5 @@
 """Tests for RAGPipeline - end-to-end document ingestion and retrieval."""
 
-import os
 from pathlib import Path
 
 import pytest
@@ -17,10 +16,7 @@ def test_pdf():
 @pytest.fixture
 def pipeline(tmp_path):
     """Create a RAG pipeline with temporary storage."""
-    return RAGPipeline(
-        collection_name="test_collection",
-        persist_directory=tmp_path / "chroma_test"
-    )
+    return RAGPipeline(collection_name="test_collection", persist_directory=tmp_path / "chroma_test")
 
 
 def test_pipeline_initialization(pipeline):
@@ -140,17 +136,11 @@ def test_persistence(tmp_path, test_pdf):
     persist_dir = tmp_path / "persist_test"
 
     # Create pipeline and ingest
-    pipeline1 = RAGPipeline(
-        collection_name="persist_test",
-        persist_directory=persist_dir
-    )
+    pipeline1 = RAGPipeline(collection_name="persist_test", persist_directory=persist_dir)
     num_chunks = pipeline1.ingest([test_pdf])
 
     # Create new pipeline instance with same directory
-    pipeline2 = RAGPipeline(
-        collection_name="persist_test",
-        persist_directory=persist_dir
-    )
+    pipeline2 = RAGPipeline(collection_name="persist_test", persist_directory=persist_dir)
 
     # Should have same documents
     assert pipeline2.count_documents() == num_chunks
@@ -171,4 +161,3 @@ def test_get_retriever(pipeline, test_pdf):
     # Test retriever works (using invoke API)
     docs = retriever.invoke("What is a derivative?")
     assert len(docs) > 0
-

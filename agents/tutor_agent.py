@@ -14,11 +14,9 @@ from core.rag_pipeline import RAGPipeline
 class VectorStore(Protocol):
     """Minimal interface for embedding storage."""
 
-    def add_documents(self, docs: Iterable[dict]) -> None:
-        ...
+    def add_documents(self, docs: Iterable[dict]) -> None: ...
 
-    def similarity_search(self, query: str, k: int = 5) -> list[dict]:
-        ...
+    def similarity_search(self, query: str, k: int = 5) -> list[dict]: ...
 
 
 class QuizItem(BaseModel):
@@ -144,4 +142,3 @@ class TutorAgent:
         print("[tutor] Clearing all materials...")
         self.rag_pipeline.clear()
         print("[tutor] Materials cleared")
-

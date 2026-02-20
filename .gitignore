@@ -9,31 +9,28 @@ __pycache__/
 build/
 dist/
 *.egg
-*\ 2.py
 
 # Virtual environments
 .env
 .env.local
 .env copy
 *.env
+!.env.example
 .venv
 venv/
 env/
 ENV/
 
-# Data outputs (user/runtime data – do not commit)
-/data/embeddings/
-/data/study_materials/
-/data/logs/
-/data/test_profiles/
-/data/profiles/
-/data/chroma_db/
-/data/test_chroma/
-/data/uploads/
-/data/quotes_store.json
+# Data (all runtime)
+/data/
 *.sqlite3
 
+# Node duplicates (npm artifact)
+*\ 2/
+*\ 2.*
+
 # Credentials and secrets
+credentials.json
 configs/credentials.json
 client_secret_*.json
 token.json
@@ -57,9 +54,23 @@ htmlcov/
 # Logs
 *.log
 logs/
+frontend_error.log
 
 # Jupyter
 .ipynb_checkpoints
 
 # Local tooling / context (may contain project-specific or sensitive notes)
 .octocode/
+
+# Google Calendar MCP credentials (OAuth tokens, secrets)
+calendar-mcp/credentials/
+
+# Old/backup node_modules
+frontend/_old_node_modules_delete_me/
+
+# Next.js build output
+frontend/.next/
+frontend/out/
+
+# Node modules
+node_modules/

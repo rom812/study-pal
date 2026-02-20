@@ -147,7 +147,7 @@ class OnboardingAgent:
             print("You can:")
             print("  - Select one or more numbers separated by commas (e.g., 1,5,8)")
             print(f"  - Choose option {len(personas_list) + 1} to create your own persona(s)")
-            choice = input(f"\nYour choice: ").strip()
+            choice = input("\nYour choice: ").strip()
 
             if not choice:
                 print("Please make a selection.\n")
@@ -225,7 +225,7 @@ class OnboardingAgent:
 
             # Confirm with user
             confirm = input("Is this correct? (yes/no): ").strip().lower()
-            if confirm in ['yes', 'y']:
+            if confirm in ["yes", "y"]:
                 return primary, unique_personas
             else:
                 print("\nLet's try again.\n")
@@ -240,7 +240,9 @@ class OnboardingAgent:
         print("-" * 70)
         print("Academic Field")
         print("-" * 70)
-        field = input("What field are you studying? (e.g., Computer Science, Math, Physics)\n[Press Enter to skip]: ").strip()
+        field = input(
+            "What field are you studying? (e.g., Computer Science, Math, Physics)\n[Press Enter to skip]: "
+        ).strip()
         return field if field else None
 
     def _collect_study_topics(self) -> list[str]:
@@ -324,7 +326,7 @@ class OnboardingAgent:
         for idx, pain_point in enumerate(self.PAIN_POINTS, 1):
             print(f"{idx:2}. {pain_point}")
 
-        print(f"\nEnter numbers separated by commas (e.g., 1,3,5)")
+        print("\nEnter numbers separated by commas (e.g., 1,3,5)")
         print("Or press Enter to skip: ")
 
         selection = input().strip()

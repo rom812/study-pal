@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable
@@ -13,9 +14,9 @@ from langchain_openai import OpenAIEmbeddings
 from .document_processor import DocumentProcessor
 from .vector_stores import ChromaVectorStore
 
-
-# Global singleton instances (one per user)
+# Global singleton instances (one per user) with thread safety
 _rag_pipeline_instances: dict[str, RAGPipeline] = {}
+_rag_pipeline_lock = threading.Lock()
 
 
 @dataclass
@@ -67,8 +68,7 @@ class RAGPipeline:
             embedding_function=self.embeddings,
         )
 
-        print(f"[rag_pipeline] Initialized with embedding model: {self.embedding_model}")
-        print(f"[rag_pipeline] Chunk size: {self.chunk_size}, overlap: {self.chunk_overlap}")
+        print(f"[rag_pipeline] Initialized for collection: {self.collection_name}")
 
     def ingest(self, paths: Iterable[Path]) -> int:
         """
@@ -102,7 +102,7 @@ class RAGPipeline:
                 chunks = self.document_processor.process_pdf(path)
                 all_chunks.extend(chunks)
 
-            except (FileNotFoundError, ValueError) as e:
+            except (FileNotFoundError, ValueError):
                 # Re-raise critical errors
                 raise
             except Exception as e:
@@ -142,7 +142,7 @@ class RAGPipeline:
         if results:
             print(f"[rag_pipeline] ✓ Found context: {len(results)} chunks retrieved")
         else:
-            print(f"[rag_pipeline] ✗ No context found for query")
+            print("[rag_pipeline] ✗ No context found for query")
 
         return [result["content"] for result in results]
 
@@ -227,11 +227,11 @@ def _sanitize_collection_name(user_id: str) -> str:
     import re
 
     # Replace invalid characters with hyphens
-    sanitized = re.sub(r'[^a-zA-Z0-9._-]', '-', user_id)
+    sanitized = re.sub(r"[^a-zA-Z0-9._-]", "-", user_id)
 
     # Remove leading/trailing invalid characters
-    sanitized = re.sub(r'^[^a-zA-Z0-9]+', '', sanitized)
-    sanitized = re.sub(r'[^a-zA-Z0-9]+$', '', sanitized)
+    sanitized = re.sub(r"^[^a-zA-Z0-9]+", "", sanitized)
+    sanitized = re.sub(r"[^a-zA-Z0-9]+$", "", sanitized)
 
     # If empty after sanitization, use default
     if not sanitized:
@@ -249,7 +249,7 @@ def _sanitize_collection_name(user_id: str) -> str:
     if len(collection_name) > 512:
         collection_name = collection_name[:512]
         # Make sure it still ends with alphanumeric
-        collection_name = re.sub(r'[^a-zA-Z0-9]+$', '', collection_name)
+        collection_name = re.sub(r"[^a-zA-Z0-9]+$", "", collection_name)
 
     return collection_name
 
@@ -281,16 +281,14 @@ def get_rag_pipeline(user_id: str = "default_user") -> RAGPipeline:
     """
     global _rag_pipeline_instances
 
-    if user_id not in _rag_pipeline_instances:
-        print(f"[rag_pipeline] Creating pipeline instance for user: {user_id}")
-        # Create user-specific collection name (sanitized for ChromaDB)
-        collection_name = _sanitize_collection_name(user_id)
-        print(f"[rag_pipeline] Collection name: {collection_name}")
-        _rag_pipeline_instances[user_id] = RAGPipeline(
-            collection_name=collection_name
-        )
+    with _rag_pipeline_lock:
+        if user_id not in _rag_pipeline_instances:
+            print(f"[rag_pipeline] Creating pipeline for user: {user_id}")
+            # Create user-specific collection name (sanitized for ChromaDB)
+            collection_name = _sanitize_collection_name(user_id)
+            _rag_pipeline_instances[user_id] = RAGPipeline(collection_name=collection_name)
 
-    return _rag_pipeline_instances[user_id]
+        return _rag_pipeline_instances[user_id]
 
 
 def reset_rag_pipeline(user_id: str | None = None) -> None:
@@ -321,4 +319,3 @@ def reset_rag_pipeline(user_id: str | None = None) -> None:
             print(f"[rag_pipeline] Pipeline instance reset for user: {user_id}")
         else:
             print(f"[rag_pipeline] No pipeline instance found for user: {user_id}")
-

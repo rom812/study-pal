@@ -1,6 +1,6 @@
 """Stub tests for MotivatorAgent."""
 
-from agents.motivator_agent import MotivatorAgent, MotivationMessage
+from agents.motivator_agent import MotivationMessage, MotivatorAgent
 
 
 class DummyFetcher:

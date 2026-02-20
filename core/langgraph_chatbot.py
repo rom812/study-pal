@@ -7,11 +7,12 @@ Now all agents (Tutor, Scheduler, Analyzer, Motivator) work together automatical
 
 import logging
 from pathlib import Path
-from langchain_core.messages import HumanMessage, AIMessage
 
-from core.workflow_graph import create_study_pal_graph
+from langchain_core.messages import AIMessage, HumanMessage
+
 from agents.tutor_agent import TutorAgent
 from core.rag_pipeline import get_rag_pipeline
+from core.workflow_graph import create_study_pal_graph
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +89,7 @@ class LangGraphChatbot:
         # Add memory interface that ChatInterface expects
         # This is a simple wrapper around conversation_state["messages"]
         from langchain_community.chat_message_histories import ChatMessageHistory
+
         self.memory = ChatMessageHistory()
 
         logger.info("[LangGraph Chatbot] Ready! All agents standing by.")
@@ -211,6 +213,7 @@ class LangGraphChatbot:
             "awaiting_schedule_confirmation": False,
             "awaiting_schedule_details": False,
             "pending_schedule_request": None,
+            "current_agent_avatar": None,
         }
         return "Conversation history cleared."
 
@@ -236,6 +239,7 @@ class LangGraphChatbot:
 
     def get_current_avatar(self) -> str:
         """Get the emoji avatar for the current agent."""
-        from core.agent_avatars import get_agent_avatar, get_user_avatar
+        from core.agent_avatars import get_agent_avatar
+
         avatar = self.conversation_state.get("current_agent_avatar")
         return avatar if avatar else get_agent_avatar("system")

@@ -7,7 +7,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 15000, // 15s - avoid hanging when backend is unreachable
+  timeout: 60000, // 60s - first chat can be slow (LLM + ChromaDB init)
 });
 
 export interface RegisterData {
@@ -62,6 +62,11 @@ export const apiClient = {
   async getProfile(userId: string): Promise<UserProfile> {
     const response = await api.get(`/api/profile/${userId}`);
     return response.data;
+  },
+
+  // Warm up chatbot (call when chat page loads to reduce first-message latency)
+  async warmup(userId: string): Promise<void> {
+    await api.get(`/api/warmup`, { params: { user_id: userId } });
   },
 
   // Send chat message

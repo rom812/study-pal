@@ -1,6 +1,7 @@
 """Tests for MotivatorAgent simplified personalization."""
 
 from __future__ import annotations
+
 from pathlib import Path
 
 from agents.motivator_agent import MotivatorAgent, Quote
@@ -15,19 +16,21 @@ class DummyLLM:
 
     def generate(self, *, persona: str, quote: Quote, profile: UserProfile) -> str:
         """Generate a mock personalized message."""
-        self.calls.append({
-            "persona": persona,
-            "quote_text": quote.text,
-            "profile_name": profile.name,
-            "weaknesses": profile.traits,
-        })
+        self.calls.append(
+            {
+                "persona": persona,
+                "quote_text": quote.text,
+                "profile_name": profile.name,
+                "weaknesses": profile.traits,
+            }
+        )
 
         # Simulate DJ Khaled example output
         weaknesses_str = ", ".join(profile.traits) if profile.traits else "challenges"
         return (
             f'"{quote.text}" — {persona}\n'
-            f'{profile.name}, I know you\'re struggling with {weaknesses_str}, but stay focused! '
-            f'Keep working toward {profile.goals[0] if profile.goals else "your goals"}.'
+            f"{profile.name}, I know you're struggling with {weaknesses_str}, but stay focused! "
+            f"Keep working toward {profile.goals[0] if profile.goals else 'your goals'}."
         )
 
 
@@ -45,7 +48,7 @@ class DummyScraper:
                 text="Don't play yourself",
                 persona=persona,
                 tags=["motivation", "focus"],
-                source_url="https://example.com/quote"
+                source_url="https://example.com/quote",
             ),
             Quote(
                 text="Another one",

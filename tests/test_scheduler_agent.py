@@ -25,10 +25,7 @@ def make_agent(json_response: str) -> SchedulerAgent:
 
 
 def test_generate_schedule_creates_rotating_pomodoro_blocks() -> None:
-    agent = make_agent(
-        '{"start_time": "17:00", "end_time": "19:00", '
-        '"subjects": ["Math", "Physics"], "notes": ""}'
-    )
+    agent = make_agent('{"start_time": "17:00", "end_time": "19:00", "subjects": ["Math", "Physics"], "notes": ""}')
 
     schedule = agent.generate_schedule({"user_input": "I am free after 5pm until 7pm for math and physics."})
 
@@ -76,18 +73,14 @@ def test_missing_required_fields_raises() -> None:
 
 
 def test_end_before_start_raises() -> None:
-    agent = make_agent(
-        '{"start_time": "12:00", "end_time": "11:00", "subjects": ["History"]}'
-    )
+    agent = make_agent('{"start_time": "12:00", "end_time": "11:00", "subjects": ["History"]}')
     with pytest.raises(ValueError, match="End time must be after start time"):
         agent.generate_schedule({"user_input": "lunch study"})
 
 
 def test_window_too_small_for_pomodoro_raises() -> None:
     agent = SchedulerAgent(
-        llm=DummyLLM(
-            '{"start_time": "10:00", "end_time": "10:10", "subjects": ["Biology"]}'
-        ),
+        llm=DummyLLM('{"start_time": "10:00", "end_time": "10:10", "subjects": ["Biology"]}'),
         pomodoro_minutes=25,
         break_minutes=5,
     )
@@ -95,9 +88,60 @@ def test_window_too_small_for_pomodoro_raises() -> None:
         agent.generate_schedule({"user_input": "short break"})
 
 
-def test_invalid_time_format_raises() -> None:
-    agent = make_agent(
-        '{"start_time": "10AM", "end_time": "12:00", "subjects": ["Chemistry"]}'
+class FakeCalendarConnector:
+    """In-memory fake for testing calendar interactions."""
+
+    def __init__(self, existing_events=None):
+        self.existing_events = existing_events or []
+        self.created_events = []
+
+    def create_event(self, payload):
+        self.created_events.append(payload)
+
+    def list_events(self, time_min=None, time_max=None, calendar_id="primary", max_results=50):
+        return self.existing_events
+
+    def call_tool(self, tool_name, arguments):
+        return None
+
+
+def test_check_availability_finds_conflicts():
+    """SchedulerAgent.check_availability returns overlapping events."""
+    existing = [
+        {
+            "summary": "Team Meeting",
+            "start": {"dateTime": "2026-02-14T17:00:00"},
+            "end": {"dateTime": "2026-02-14T18:00:00"},
+        },
+    ]
+    connector = FakeCalendarConnector(existing_events=existing)
+    agent = SchedulerAgent(
+        llm=DummyLLM('{"start_time": "17:00", "end_time": "19:00", "subjects": ["Math"]}'),
+        calendar_connector=connector,
     )
+    conflicts = agent.check_availability("2026-02-14", "17:00", "19:00")
+    assert len(conflicts) == 1
+    assert conflicts[0]["summary"] == "Team Meeting"
+
+
+def test_check_availability_returns_empty_when_free():
+    connector = FakeCalendarConnector(existing_events=[])
+    agent = SchedulerAgent(
+        llm=DummyLLM('{"start_time":"10:00","end_time":"12:00","subjects":["Math"]}'),
+        calendar_connector=connector,
+    )
+    conflicts = agent.check_availability("2026-02-14", "10:00", "12:00")
+    assert conflicts == []
+
+
+def test_check_availability_none_connector():
+    """No connector configured returns empty (graceful degradation)."""
+    agent = SchedulerAgent(llm=DummyLLM("{}"), calendar_connector=None)
+    conflicts = agent.check_availability("2026-02-14", "10:00", "12:00")
+    assert conflicts == []
+
+
+def test_invalid_time_format_raises() -> None:
+    agent = make_agent('{"start_time": "10AM", "end_time": "12:00", "subjects": ["Chemistry"]}')
     with pytest.raises(ValueError, match="HH:MM 24-hour"):
         agent.generate_schedule({"user_input": "late morning study"})

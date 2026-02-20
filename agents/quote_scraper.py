@@ -40,8 +40,7 @@ class WebSearchQuoteScraper:
     ) -> None:
         if OpenAI is None:
             raise ImportError(
-                "The 'openai' package is required for WebSearchQuoteScraper. "
-                "Install it via `pip install openai`."
+                "The 'openai' package is required for WebSearchQuoteScraper. Install it via `pip install openai`."
             )
 
         api_key = os.getenv("OPENAI_API_KEY")
@@ -110,9 +109,9 @@ IMPORTANT:
 
             # Clean up the response - remove markdown code blocks if present
             content = content.strip()
-            content = re.sub(r'^```json\s*', '', content)
-            content = re.sub(r'^```\s*', '', content)
-            content = re.sub(r'\s*```$', '', content)
+            content = re.sub(r"^```json\s*", "", content)
+            content = re.sub(r"^```\s*", "", content)
+            content = re.sub(r"\s*```$", "", content)
 
             # Parse JSON
             quotes_data = json.loads(content)
@@ -150,7 +149,7 @@ class PersonalizedQuoteGenerator:
         "You create deeply personalized motivational messages by connecting "
         "a persona's quote to the user's specific situation, struggles, and goals.\n\n"
         "Structure your response as follows:\n"
-        "1) First line: The exact quote, formatted as \"quote\" - Persona Name\n"
+        '1) First line: The exact quote, formatted as "quote" - Persona Name\n'
         "2) Following lines: A thoughtful, personalized reflection (2-4 sentences) that:\n"
         "   - Explains why this quote resonates with the user's specific situation\n"
         "   - References the persona's own struggles/journey that parallel the user's challenges\n"
@@ -167,8 +166,7 @@ class PersonalizedQuoteGenerator:
     ) -> None:
         if OpenAI is None:
             raise ImportError(
-                "The 'openai' package is required for PersonalizedQuoteGenerator. "
-                "Install it via `pip install openai`."
+                "The 'openai' package is required for PersonalizedQuoteGenerator. Install it via `pip install openai`."
             )
 
         api_key = os.getenv("OPENAI_API_KEY")

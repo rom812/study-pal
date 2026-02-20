@@ -1,12 +1,8 @@
-# Docs
+# Documentation
 
-## Screenshot for README
-
-To add a hero screenshot to the main README:
-
-1. Run the app: `./start_dev.sh`
-2. Open http://localhost:3000 and go through the chat flow (register, upload a PDF, ask a question)
-3. Take a screenshot of the chat UI
-4. Save it as `docs/screenshot.png`
-
-The README will display it automatically once the file exists.
+| Document | Description |
+|----------|-------------|
+| [Quick Start](quick-start.md) | Setup and run the app locally |
+| [Architecture](architecture.md) | System diagrams and agent flow |
+| [Deployment](deployment.md) | Docker, AWS, and production deployment |
+| [Demo Script](demo.md) | Step-by-step recruiter demo walkthrough |

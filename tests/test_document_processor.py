@@ -88,10 +88,7 @@ def test_chunk_documents_preserves_small_docs(processor):
 
 def test_extract_metadata(processor):
     """Test metadata extraction."""
-    doc = Document(
-        page_content="Test content with multiple words here.",
-        metadata={"page": 5, "source": "test.pdf"}
-    )
+    doc = Document(page_content="Test content with multiple words here.", metadata={"page": 5, "source": "test.pdf"})
 
     metadata = processor.extract_metadata(doc)
 
@@ -117,8 +114,7 @@ def test_process_pdf_end_to_end(processor, test_pdf):
 
     # Content should be from the PDF
     all_content = " ".join(chunk.page_content for chunk in chunks)
-    assert any(keyword in all_content.lower()
-              for keyword in ["derivative", "integral", "limit", "calculus"])
+    assert any(keyword in all_content.lower() for keyword in ["derivative", "integral", "limit", "calculus"])
 
 
 def test_chunk_size_configuration():

@@ -22,8 +22,7 @@ except ImportError:  # pragma: no cover
 class ConversationModel(Protocol):
     """Minimal LLM interface used by the scheduler agent."""
 
-    def generate(self, prompt: str) -> str:
-        ...
+    def generate(self, prompt: str) -> str: ...
 
 
 DEFAULT_POMODORO_MINUTES = 25
@@ -71,7 +70,7 @@ class SchedulerAgent:
             recommendations = self._dict_to_recommendations(recommendations)
 
         # If we have recommendations, adjust the subject prioritization
-        if recommendations and hasattr(recommendations, 'weak_points') and recommendations.weak_points:
+        if recommendations and hasattr(recommendations, "weak_points") and recommendations.weak_points:
             preferences = self._prioritize_weak_topics(preferences, recommendations)
 
         sessions = self._build_pomodoro_plan(preferences)
@@ -80,9 +79,8 @@ class SchedulerAgent:
         schedule = {
             "preferences": preferences,
             "sessions": sessions,
-            "based_on_weak_points": recommendations is not None and (
-                hasattr(recommendations, 'weak_points') and len(recommendations.weak_points) > 0
-            ),
+            "based_on_weak_points": recommendations is not None
+            and (hasattr(recommendations, "weak_points") and len(recommendations.weak_points) > 0),
         }
 
         self._last_schedule = schedule
@@ -94,6 +92,58 @@ class SchedulerAgent:
 
         # Use the from_dict class method for conversion
         return SessionRecommendations.from_dict(data)
+
+    def check_availability(self, date: str, start_time: str, end_time: str) -> list[dict]:
+        """Check Google Calendar for conflicts in the given time window.
+
+        Args:
+            date: ISO date string "YYYY-MM-DD"
+            start_time: "HH:MM" 24-hour format
+            end_time: "HH:MM" 24-hour format
+
+        Returns:
+            List of conflicting event dicts. Empty list if free or no connector.
+        """
+        if self.calendar_connector is None:
+            return []
+
+        if not hasattr(self.calendar_connector, "list_events"):
+            return []
+
+        try:
+            window_start = datetime.strptime(f"{date} {start_time}", "%Y-%m-%d %H:%M")
+            window_end = datetime.strptime(f"{date} {end_time}", "%Y-%m-%d %H:%M")
+        except ValueError:
+            return []
+
+        try:
+            events = self.calendar_connector.list_events(
+                time_min=window_start.isoformat(),
+                time_max=window_end.isoformat(),
+            )
+        except Exception as exc:
+            logger.warning("Availability check failed: %s", exc)
+            return []
+
+        # Filter to events that actually overlap with our window
+        conflicts = []
+        for event in events:
+            event_start_str = event.get("start", {}).get("dateTime") or event.get("start", "")
+            event_end_str = event.get("end", {}).get("dateTime") or event.get("end", "")
+            if not event_start_str or not event_end_str:
+                continue
+            try:
+                # Handle both ISO formats (with and without timezone)
+                event_start = datetime.fromisoformat(event_start_str.replace("Z", "+00:00")).replace(tzinfo=None)
+                event_end = datetime.fromisoformat(event_end_str.replace("Z", "+00:00")).replace(tzinfo=None)
+            except (ValueError, TypeError):
+                continue
+
+            # Overlap: event_start < window_end AND event_end > window_start
+            if event_start < window_end and event_end > window_start:
+                conflicts.append(event)
+
+        return conflicts
 
     def sync_schedule(self, schedule: dict) -> None:
         """Persist the latest schedule by creating calendar events."""
@@ -121,27 +171,40 @@ class SchedulerAgent:
 
     def _build_calendar_event_payload(self, session: dict, preferences: dict) -> dict:
         """Build a calendar event payload for a study session."""
-        from datetime import datetime, timedelta
+        from datetime import datetime
 
-        # Parse start and end times
-        start_time_str = session["start"]  # Format: "HH:MM"
-        end_time_str = session["end"]
         subject = session.get("subject", "Study")
 
-        # Convert to ISO 8601 datetime strings (assuming today's date)
-        today = datetime.now().date()
-        start_dt = datetime.combine(today, datetime.strptime(start_time_str, "%H:%M").time())
-        end_dt = datetime.combine(today, datetime.strptime(end_time_str, "%H:%M").time())
+        # Prefer full ISO datetime strings from the session (already include correct date)
+        start_iso = session.get("start_datetime")
+        end_iso = session.get("end_datetime")
 
-        # Build the MCP create_event payload
-        # Format: https://github.com/nspady/google-calendar-mcp
+        if start_iso and end_iso:
+            start_dt = datetime.fromisoformat(start_iso)
+            end_dt = datetime.fromisoformat(end_iso)
+        else:
+            # Fallback: combine session date (or preference date, or today) with times
+            start_time_str = session["start"]  # Format: "HH:MM"
+            end_time_str = session["end"]
+
+            session_date = session.get("date") or preferences.get("date")
+            if session_date:
+                try:
+                    date_obj = datetime.strptime(session_date, "%Y-%m-%d").date()
+                except (ValueError, TypeError):
+                    date_obj = datetime.now().date()
+            else:
+                date_obj = datetime.now().date()
+
+            start_dt = datetime.combine(date_obj, datetime.strptime(start_time_str, "%H:%M").time())
+            end_dt = datetime.combine(date_obj, datetime.strptime(end_time_str, "%H:%M").time())
+
+        # Google Calendar API event format
         return {
-            "calendarId": "primary",  # Use primary calendar
             "summary": f"Study: {subject}",
             "description": f"Pomodoro study session for {subject}",
-            "start": start_dt.isoformat(),  # ISO 8601 string
-            "end": end_dt.isoformat(),  # ISO 8601 string
-            "timeZone": "Asia/Jerusalem",  # Israel timezone
+            "start": {"dateTime": start_dt.isoformat(), "timeZone": "Asia/Jerusalem"},
+            "end": {"dateTime": end_dt.isoformat(), "timeZone": "Asia/Jerusalem"},
         }
 
     def _ensure_llm(self) -> ConversationModel | None:
@@ -164,14 +227,21 @@ class SchedulerAgent:
         llm: ConversationModel | None,
         context: dict | None,
     ) -> dict:
+        current_date = datetime.now()
         prompt = (
             "You are Study Pal's scheduling assistant.\n"
             "Extract the user's study availability and subjects from the note below and respond ONLY with JSON.\n"
             "Required keys: start_time (HH:MM 24-hour), end_time (HH:MM 24-hour), subjects (array of strings).\n"
+            "Required keys (ALWAYS include):\n"
+            "  - date (YYYY-MM-DD format): The specific date for the session. You MUST calculate and include this.\n"
+            "    * If user says 'today' → use today's date\n"
+            "    * If user says 'tomorrow' → use tomorrow's date\n"
+            f"    * If user says a day of week (e.g. 'Tuesday') → calculate the NEXT occurrence from today ({current_date.strftime('%A, %Y-%m-%d')})\n"
+            "    * If no day specified → default to today's date\n"
             "Optional keys:\n"
-            "  - date (YYYY-MM-DD format): The specific date for the session. If user says 'today', use today's date. If 'tomorrow', use tomorrow's date. If a day of week (Monday, Tuesday, etc.), calculate the next occurrence of that day.\n"
             "  - notes (string): Any assumptions or clarifications.\n"
-            f"Today's date is: {datetime.now().strftime('%Y-%m-%d (%A)')}\n"
+            f"IMPORTANT: Today is {current_date.strftime('%A, %B %d, %Y')} ({current_date.strftime('%Y-%m-%d')}). "
+            f"Current day of week: {current_date.strftime('%A')}.\n"
             f"USER_NOTE: {user_input}\n"
         )
         if llm is None:
@@ -209,20 +279,9 @@ class SchedulerAgent:
         return parsed
 
     def _build_pomodoro_plan(self, preferences: dict) -> list[dict]:
-        start = self._parse_clock(preferences["start_time"])
-        end = self._parse_clock(preferences["end_time"])
-
-        # Parse session date if provided
         session_date = preferences.get("date")
-        if session_date:
-            try:
-                # Parse the date and combine with times
-                date_obj = datetime.strptime(session_date, "%Y-%m-%d").date()
-                start = datetime.combine(date_obj, start.time())
-                end = datetime.combine(date_obj, end.time())
-            except (ValueError, TypeError):
-                # If date parsing fails, use today's date
-                logger.warning(f"Could not parse date '{session_date}', using today's date")
+        start = self._parse_clock(preferences["start_time"], base_date=session_date)
+        end = self._parse_clock(preferences["end_time"], base_date=session_date)
 
         if end <= start:
             raise ValueError("End time must be after start time.")
@@ -354,31 +413,19 @@ class SchedulerAgent:
         prioritized_subjects = []
 
         # 1. Add severe difficulty topics first
-        severe_topics = [
-            wp.topic
-            for wp in recommendations.weak_points
-            if wp.difficulty_level == "severe"
-        ]
+        severe_topics = [wp.topic for wp in recommendations.weak_points if wp.difficulty_level == "severe"]
         for topic in severe_topics:
             if topic not in prioritized_subjects:
                 prioritized_subjects.append(topic)
 
         # 2. Add moderate difficulty topics
-        moderate_topics = [
-            wp.topic
-            for wp in recommendations.weak_points
-            if wp.difficulty_level == "moderate"
-        ]
+        moderate_topics = [wp.topic for wp in recommendations.weak_points if wp.difficulty_level == "moderate"]
         for topic in moderate_topics:
             if topic not in prioritized_subjects:
                 prioritized_subjects.append(topic)
 
         # 3. Add mild difficulty topics
-        mild_topics = [
-            wp.topic
-            for wp in recommendations.weak_points
-            if wp.difficulty_level == "mild"
-        ]
+        mild_topics = [wp.topic for wp in recommendations.weak_points if wp.difficulty_level == "mild"]
         for topic in mild_topics:
             if topic not in prioritized_subjects:
                 prioritized_subjects.append(topic)
@@ -442,8 +489,13 @@ class SchedulerAgent:
 
         # Check for day of week
         days_of_week = {
-            "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
-            "friday": 4, "saturday": 5, "sunday": 6
+            "monday": 0,
+            "tuesday": 1,
+            "wednesday": 2,
+            "thursday": 3,
+            "friday": 4,
+            "saturday": 5,
+            "sunday": 6,
         }
 
         for day_name, day_num in days_of_week.items():
@@ -537,14 +589,19 @@ class SchedulerAgent:
                     subjects.append(subject)
         return subjects
 
-    def _parse_clock(self, value: str) -> datetime:
+    def _parse_clock(self, value: str, base_date: str | None = None) -> datetime:
         try:
             time_obj = datetime.strptime(value, "%H:%M").time()
         except ValueError as exc:
             raise ValueError("Times must be provided in HH:MM 24-hour format.") from exc
 
-        today = datetime.now()
-        return datetime.combine(today.date(), time_obj)
+        if base_date:
+            try:
+                date_obj = datetime.strptime(base_date, "%Y-%m-%d").date()
+                return datetime.combine(date_obj, time_obj)
+            except (ValueError, TypeError):
+                pass
+        return datetime.combine(datetime.now().date(), time_obj)
 
 
 class OpenAIConversationModel:
@@ -558,15 +615,13 @@ class OpenAIConversationModel:
     ) -> None:
         if OpenAI is None:  # pragma: no cover - import defender
             raise ImportError(
-                "The 'openai' package is required to use OpenAIConversationModel. "
-                "Install it via `pip install openai`."
+                "The 'openai' package is required to use OpenAIConversationModel. Install it via `pip install openai`."
             )
 
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise RuntimeError(
-                "OPENAI_API_KEY environment variable is not set. "
-                "Provide an API key to enable the scheduler agent."
+                "OPENAI_API_KEY environment variable is not set. Provide an API key to enable the scheduler agent."
             )
 
         self._client = OpenAI(api_key=api_key)
