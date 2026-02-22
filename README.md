@@ -11,7 +11,9 @@
 **Quick Start:** `./scripts/start_dev.sh` → open http://localhost:3000 (see [Quick Start](docs/quick-start.md))
 
 <div align="center">
-  <img src="docs/screenshot.png" alt="Study Pal Chat UI" width="80%" />
+  <video src="data/demo_1.5x.mp4" width="80%" autoplay muted loop>
+    Your browser does not support the video tag.
+  </video>
 </div>
 
 Study Pal is your autonomous study mentor: it plans lessons, delivers personalized tutoring, tracks comprehension, and keeps motivation high. Built on **LangGraph**, modern LLMs, and a **multi-agent architecture**, it works like a full learning team in your pocket.
@@ -47,6 +49,34 @@ Study Pal is your autonomous study mentor: it plans lessons, delivers personaliz
 ---
 
 ## Architecture Overview
+
+<div align="center">
+  <img src="data/architecture.png" alt="Study Pal – System Architecture" width="100%" />
+  <br /><em>System Architecture Diagram</em>
+</div>
+
+<br />
+
+Study Pal is a **full-stack, multi-agent AI system** built across six interconnected layers:
+
+1. **Frontend (Next.js 14)** — A React/TypeScript chat UI with Tailwind CSS. Includes a login page, registration, chat interface, PDF upload, and reusable components (ChatHeader, MessageList, ChatInput, Avatars). Communicates with the backend over REST/JSON with CORS.
+
+2. **API Layer (FastAPI / Uvicorn)** — Exposes five main endpoints: user registration (`POST /auth/register`), chat messaging (`POST /api/chat`), PDF ingestion (`POST /api/upload`), user profile retrieval (`GET /api/profile`), and a preload warmup route (`GET /warmup`).
+
+3. **Orchestration (LangGraph State Machine)** — The brain of the system. An **Intent Router** (GPT-4o-mini) classifies each user message and routes it to the appropriate agent. Shared state is managed through a `StudyPalState` TypedDict (messages, user profile, current intent, weak points, schedule, session mode) with a `MemorySaver` checkpointer for per-user state persistence.
+
+4. **AI Agents (LangChain / GPT-4o-mini)** — Five specialized agents handle different concerns:
+   - **Tutor Agent** — RAG-powered Q&A, quiz generation, and feedback grounded in uploaded materials.
+   - **Scheduler Agent** — Pomodoro-style study plans with topic priority and optional Google Calendar sync.
+   - **Weakness Detector** — Session analysis, pattern detection, and study recommendations from transcripts.
+   - **Motivator Agent** — Persona-based motivational messages drawing from 12+ persona quote libraries.
+   - **Onboarding Agent** — Interactive first-run user setup (persona, field, goals).
+
+5. **External Services** — OpenAI API (GPT-4o-mini for LLM, text-embedding-3-small for 1536-dim embeddings), Google Calendar API (OAuth2 for event creation and study session scheduling), a document processing pipeline (PyPDF extraction → RecursiveTextSplitter → OpenAI embeddings → ChromaDB storage), and an LLM-powered quote scraper with fallback to stored persona libraries.
+
+6. **Data & Storage** — ChromaDB vector store with per-user collections and 1536-dimension embeddings, JSON-based user profiles (`/data/profiles/{user_id}.json`), and file storage for uploaded PDFs and study materials (`/data/uploads/`, `/data/study_materials/`).
+
+**Deployment** options include Docker (python:3.10-slim), Docker Compose (API + volumes), GitHub Actions CI (pytest), and a terminal CLI (`terminal_app.py`).
 
 ### Core Agents
 

@@ -22,7 +22,9 @@ env/
 ENV/
 
 # Data (all runtime)
-/data/
+/data/*
+!/data/demo_1.5x.mp4
+!/data/architecture.png
 *.sqlite3
 
 # Node duplicates (npm artifact)
