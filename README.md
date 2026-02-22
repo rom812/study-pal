@@ -11,9 +11,9 @@
 **Quick Start:** `./scripts/start_dev.sh` → open http://localhost:3000 (see [Quick Start](docs/quick-start.md))
 
 <div align="center">
-  <video src="data/demo_1.5x.mp4" width="80%" autoplay muted loop>
-    Your browser does not support the video tag.
-  </video>
+
+https://github.com/user-attachments/assets/e78886c0-0a2d-4646-bee0-76afafa44e55
+
 </div>
 
 Study Pal is your autonomous study mentor: it plans lessons, delivers personalized tutoring, tracks comprehension, and keeps motivation high. Built on **LangGraph**, modern LLMs, and a **multi-agent architecture**, it works like a full learning team in your pocket.
